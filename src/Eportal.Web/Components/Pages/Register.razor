@@ -1,9 +1,10 @@
 ﻿@page "/register"
-@rendermode InteractiveServer
+@attribute [Authorize(Roles = "Administrator,StudentskaSluzba")]
 @using Eportal.Modules.Identity.Domain
+@using Microsoft.AspNetCore.Authorization
 @using Microsoft.AspNetCore.Identity
-@inject UserManager<AppUser> UserManager
 @using System.ComponentModel.DataAnnotations
+@inject UserManager<AppUser> UserManager
 
 <PageTitle>Registracija</PageTitle>
 
@@ -33,6 +34,16 @@
         <InputText class="form-control" type="password" @bind-Value="model.Password" />
     </div>
 
+    <div class="mb-3">
+        <label>Uloga</label>
+        <InputSelect class="form-control" @bind-Value="model.Role">
+            @foreach (var role in allowedRoles)
+            {
+                <option value="@role">@role</option>
+            }
+        </InputSelect>
+    </div>
+
     <button type="submit" class="btn btn-primary">Registruj se</button>
 </EditForm>
 
@@ -42,22 +53,48 @@
 }
 
 @code {
+    [CascadingParameter]
+    private Task<AuthenticationState>? AuthStateTask { get; set; }
+
     [SupplyParameterFromForm]
     private RegisterModel? model { get; set; }
 
-    protected override void OnInitialized() => model ??= new();
-
+    private bool isAdmin;
+    private List<UserRole> allowedRoles = new();
     private string? resultMessage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        model ??= new();
+
+        var authState = await AuthStateTask!;
+        isAdmin = authState.User.IsInRole("Administrator");
+
+        allowedRoles = isAdmin
+            ? new List<UserRole> { UserRole.Student, UserRole.Profesor, UserRole.StudentskaSluzba, UserRole.Administrator }
+            : new List<UserRole> { UserRole.Student, UserRole.Profesor };
+
+        if (!allowedRoles.Contains(model!.Role))
+        {
+            model.Role = allowedRoles[0];
+        }
+    }
 
     private async Task HandleRegister()
     {
+        if (!allowedRoles.Contains(model!.Role))
+        {
+            resultMessage = "Nemaš dozvolu da dodeliš tu ulogu.";
+            return;
+        }
+
         var user = new AppUser
         {
             UserName = model.Email,
             Email = model.Email,
             FirstName = model.FirstName,
             LastName = model.LastName,
-            Role = UserRole.Student
+            Role = model.Role
         };
 
         var result = await UserManager.CreateAsync(user, model.Password);
@@ -79,5 +116,6 @@
         [Required] public string LastName { get; set; } = "";
         [Required][EmailAddress] public string Email { get; set; } = "";
         [Required] public string Password { get; set; } = "";
+        public UserRole Role { get; set; } = UserRole.Student;
     }
 }

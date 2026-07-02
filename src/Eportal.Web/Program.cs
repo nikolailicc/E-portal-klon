@@ -32,6 +32,7 @@ var app = builder.Build();
 using (var scope = app.Services.CreateScope())
 {
     await Eportal.Modules.Identity.Infrastructure.RoleSeeder.SeedAsync(scope.ServiceProvider);
+    await Eportal.Modules.Identity.Infrastructure.AdminSeeder.SeedAsync(scope.ServiceProvider);
 }
 
 // Configure the HTTP request pipeline.
