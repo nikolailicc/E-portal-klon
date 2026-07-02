@@ -1,0 +1,156 @@
+﻿@page "/profile"
+@attribute [Authorize]
+@rendermode InteractiveServer
+@using Eportal.Modules.Identity.Domain
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Identity
+@using System.ComponentModel.DataAnnotations
+@inject UserManager<AppUser> UserManager
+@inject AuthenticationStateProvider AuthProvider
+@inject SignInManager<AppUser> SignInManager
+
+<PageTitle>Moj profil</PageTitle>
+
+<h3>Moj profil</h3>
+
+@if (currentUser is null)
+{
+    <p>Učitavanje...</p>
+}
+else
+{
+    <h5>Lični podaci</h5>
+    <EditForm Model="@profileModel" OnValidSubmit="HandleUpdateProfile" FormName="profile-form">
+        <DataAnnotationsValidator />
+        <ValidationSummary />
+
+        <div class="mb-3">
+            <label>Ime</label>
+            <InputText class="form-control" @bind-Value="profileModel.FirstName" />
+        </div>
+
+        <div class="mb-3">
+            <label>Prezime</label>
+            <InputText class="form-control" @bind-Value="profileModel.LastName" />
+        </div>
+
+        <div class="mb-3">
+            <label>Email</label>
+            <input class="form-control" value="@currentUser.Email" disabled />
+        </div>
+
+        <div class="mb-3">
+            <label>Uloga</label>
+            <input class="form-control" value="@currentUser.Role" disabled />
+        </div>
+
+        <button type="submit" class="btn btn-primary">Sačuvaj izmene</button>
+    </EditForm>
+
+    @if (!string.IsNullOrEmpty(profileMessage))
+    {
+        <p class="mt-2">@profileMessage</p>
+    }
+
+    <hr class="my-4" />
+
+    <h5>Promena lozinke</h5>
+    <EditForm Model="@passwordModel" OnValidSubmit="HandleChangePassword" FormName="password-form">
+        <DataAnnotationsValidator />
+        <ValidationSummary />
+
+        <div class="mb-3">
+            <label>Trenutna lozinka</label>
+            <InputText class="form-control" type="password" @bind-Value="passwordModel.CurrentPassword" />
+        </div>
+
+        <div class="mb-3">
+            <label>Nova lozinka</label>
+            <InputText class="form-control" type="password" @bind-Value="passwordModel.NewPassword" />
+        </div>
+
+        <div class="mb-3">
+            <label>Potvrdi novu lozinku</label>
+            <InputText class="form-control" type="password" @bind-Value="passwordModel.ConfirmPassword" />
+        </div>
+
+        <button type="submit" class="btn btn-primary">Promeni lozinku</button>
+    </EditForm>
+
+    @if (!string.IsNullOrEmpty(passwordMessage))
+    {
+        <p class="mt-2">@passwordMessage</p>
+    }
+}
+
+@code {
+    private AppUser? currentUser;
+    private ProfileModel profileModel = new();
+    private PasswordModel passwordModel = new();
+    private string? profileMessage;
+    private string? passwordMessage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthProvider.GetAuthenticationStateAsync();
+        currentUser = await UserManager.GetUserAsync(authState.User);
+
+        if (currentUser is not null)
+        {
+            profileModel.FirstName = currentUser.FirstName;
+            profileModel.LastName = currentUser.LastName;
+        }
+    }
+
+    private async Task HandleUpdateProfile()
+    {
+        if (currentUser is null) return;
+
+        currentUser.FirstName = profileModel.FirstName;
+        currentUser.LastName = profileModel.LastName;
+
+        var result = await UserManager.UpdateAsync(currentUser);
+
+        profileMessage = result.Succeeded
+            ? "Podaci sačuvani."
+            : string.Join(", ", result.Errors.Select(e => e.Description));
+    }
+
+    private async Task HandleChangePassword()
+    {
+        if (currentUser is null) return;
+
+        if (passwordModel.NewPassword != passwordModel.ConfirmPassword)
+        {
+            passwordMessage = "Nova lozinka i potvrda se ne poklapaju.";
+            return;
+        }
+
+        var result = await UserManager.ChangePasswordAsync(
+            currentUser, passwordModel.CurrentPassword, passwordModel.NewPassword);
+
+        if (result.Succeeded)
+        {
+            await SignInManager.RefreshSignInAsync(currentUser);
+            passwordMessage = "Lozinka uspešno promenjena.";
+            passwordModel = new();
+        }
+        else
+        {
+            passwordMessage = string.Join(", ", result.Errors.Select(e => e.Description));
+        }
+    }
+
+    public class ProfileModel
+    {
+        [Required] public string FirstName { get; set; } = "";
+        [Required] public string LastName { get; set; } = "";
+    }
+
+    public class PasswordModel
+    {
+        [Required] public string CurrentPassword { get; set; } = "";
+        [Required] public string NewPassword { get; set; } = "";
+        [Required] public string ConfirmPassword { get; set; } = "";
+    }
+}

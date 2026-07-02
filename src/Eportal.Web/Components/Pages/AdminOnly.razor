@@ -1,8 +1,0 @@
-﻿@page "/admin-only"
-@attribute [Authorize(Roles = "Administrator")]
-@using Microsoft.AspNetCore.Authorization
-
-<PageTitle>Administracija</PageTitle>
-
-<h3>Ova stranica je vidljiva samo administratorima</h3>
-<p>Ako ovo vidiš, uspešno si prijavljen kao Administrator.</p>

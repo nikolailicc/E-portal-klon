@@ -1,0 +1,111 @@
+﻿@page "/users"
+@rendermode InteractiveServer
+@attribute [Authorize(Roles = "Administrator")]
+@using Eportal.Modules.Identity.Domain
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Identity
+@inject UserManager<AppUser> UserManager
+
+<PageTitle>Korisnici</PageTitle>
+
+<h3>Upravljanje korisnicima</h3>
+
+@if (users is null)
+{
+    <p>Učitavanje...</p>
+}
+else
+{
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Ime i prezime</th>
+                <th>Email</th>
+                <th>Uloga</th>
+                <th>Status</th>
+                <th>Akcije</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var u in users)
+            {
+                var isLocked = u.LockoutEnd is not null && u.LockoutEnd > DateTimeOffset.UtcNow;
+
+                <tr>
+                    <td>@u.FirstName @u.LastName</td>
+                    <td>@u.Email</td>
+                    <td>
+                        <select class="form-select form-select-sm" style="width:auto; display:inline-block"
+                                value="@u.Role"
+                                @onchange="e => ChangeRole(u, e.Value!.ToString()!)">
+                            @foreach (var role in Enum.GetValues<UserRole>())
+                            {
+                                <option value="@role">@role</option>
+                            }
+                        </select>
+                    </td>
+                    <td>@(isLocked ? "Deaktiviran" : "Aktivan")</td>
+                    <td>
+                        @if (isLocked)
+                        {
+                            <button class="btn btn-sm btn-outline-success" @onclick="() => Activate(u)">Aktiviraj</button>
+                        }
+                        else
+                        {
+                            <button class="btn btn-sm btn-outline-danger" @onclick="() => Deactivate(u)">Deaktiviraj</button>
+                        }
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@if (!string.IsNullOrEmpty(message))
+{
+    <p class="mt-2">@message</p>
+}
+
+@code {
+    private List<AppUser>? users;
+    private string? message;
+
+    protected override void OnInitialized()
+    {
+        LoadUsers();
+    }
+
+    private void LoadUsers()
+    {
+        users = UserManager.Users.ToList();
+    }
+
+    private async Task ChangeRole(AppUser user, string newRoleName)
+    {
+        var newRole = Enum.Parse<UserRole>(newRoleName);
+
+        var currentRoles = await UserManager.GetRolesAsync(user);
+        await UserManager.RemoveFromRolesAsync(user, currentRoles);
+        await UserManager.AddToRoleAsync(user, newRole.ToString());
+
+        user.Role = newRole;
+        await UserManager.UpdateAsync(user);
+
+        message = $"Uloga korisnika {user.Email} promenjena u {newRole}.";
+        LoadUsers();
+    }
+
+    private async Task Deactivate(AppUser user)
+    {
+        await UserManager.SetLockoutEndDateAsync(user, DateTimeOffset.MaxValue);
+        message = $"Korisnik {user.Email} je deaktiviran.";
+        LoadUsers();
+    }
+
+    private async Task Activate(AppUser user)
+    {
+        await UserManager.SetLockoutEndDateAsync(user, null);
+        message = $"Korisnik {user.Email} je aktiviran.";
+        LoadUsers();
+    }
+}

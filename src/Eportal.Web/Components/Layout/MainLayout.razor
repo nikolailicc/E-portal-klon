@@ -7,19 +7,20 @@
 
     <main>
         <div class="top-row px-4">
-        <AuthorizeView>
-            <Authorized>
-                <span class="me-3">Prijavljen kao: @context.User.Identity?.Name</span>
-                <form method="post" action="/logout">
-                    <button type="submit" class="btn btn-link">Odjavi se</button>
-                </form>
-            </Authorized>
-            <NotAuthorized>
-                <a href="/login">Prijava</a>
-            </NotAuthorized>
-        </AuthorizeView>
-        <a href="https://learn.microsoft.com/aspnet/core/" target="_blank">About</a>
-</div>
+            <AuthorizeView>
+                <Authorized>
+                    <span class="me-3">Prijavljen kao: @context.User.Identity?.Name</span>
+                    
+                    <form method="post" action="/logout" class="d-inline">
+                        <button type="submit" class="btn btn-link">Odjavi se</button>
+                    </form>
+                    <a href="/profile" class="me-3">Moj profil</a>
+                </Authorized>
+                <NotAuthorized>
+                    <a href="/login">Prijava</a>
+                </NotAuthorized>
+            </AuthorizeView>
+        </div>
 
         <article class="content px-4">
             @Body
