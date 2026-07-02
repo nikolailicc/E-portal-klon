@@ -3,6 +3,7 @@
   <ItemGroup>
     <ProjectReference Include="..\Eportal.Shared\Eportal.Shared.csproj" />
     <ProjectReference Include="..\Eportal.Modules.Identity\Eportal.Modules.Identity.csproj" />
+    <ProjectReference Include="..\Eportal.Modules.Academic\Eportal.Modules.Academic.csproj" />
   </ItemGroup>
 
   <ItemGroup>

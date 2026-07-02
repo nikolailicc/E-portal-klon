@@ -1,8 +1,13 @@
+
+using Eportal.Modules.Academic.Infrastructure;
+using Eportal.Modules.Identity.Application;
 using Eportal.Modules.Identity.Domain;
 using Eportal.Modules.Identity.Infrastructure;
+using Eportal.Shared;
 using Eportal.Web.Components;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -16,8 +21,16 @@ builder.Services.AddDbContext<IdentityDbContext>(options =>
         ServerVersion.AutoDetect(builder.Configuration.GetConnectionString("DefaultConnection"))
     ));
 
+builder.Services.AddDbContext<AcademicDbContext>(options =>
+    options.UseMySql(
+        builder.Configuration.GetConnectionString("DefaultConnection"),
+        ServerVersion.AutoDetect(builder.Configuration.GetConnectionString("DefaultConnection"))
+    ));
+
 builder.Services.AddIdentity<AppUser, IdentityRole>()
     .AddEntityFrameworkStores<IdentityDbContext>();
+
+builder.Services.AddScoped<IUserLookupService, UserLookupService>();
 
 builder.Services.ConfigureApplicationCookie(options =>
 {
@@ -45,10 +58,10 @@ if (!app.Environment.IsDevelopment())
 app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
 app.UseHttpsRedirection();
 
-app.UseAntiforgery();
-
 app.UseAuthentication();
 app.UseAuthorization();
+
+app.UseAntiforgery();
 
 app.MapPost("/logout", async (SignInManager<AppUser> signInManager) =>
 {

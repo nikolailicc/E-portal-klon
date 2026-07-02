@@ -1,0 +1,183 @@
+﻿@page "/courses/add"
+@attribute [Authorize(Roles = "Administrator,StudentskaSluzba")]
+@rendermode InteractiveServer
+@using Eportal.Modules.Academic.Domain
+@using Eportal.Modules.Academic.Infrastructure
+@using Eportal.Shared
+@using Microsoft.AspNetCore.Authorization
+@using System.ComponentModel.DataAnnotations
+@inject AcademicDbContext AcademicDb
+@inject IUserLookupService UserLookup
+@inject IJSRuntime JS
+
+<PageTitle>Dodaj predmet</PageTitle>
+
+<h3>Dodaj predmet</h3>
+
+@if (professors is null)
+{
+    <p>Učitavanje...</p>
+}
+else if (professors.Count == 0)
+{
+    <p>Nema registrovanih profesora. Prvo dodaj nalog sa ulogom "Profesor" preko stranice "Dodaj nalog".</p>
+}
+else
+{
+    <EditForm Model="@model" OnValidSubmit="HandleAddCourse" FormName="add-course-form">
+        <DataAnnotationsValidator />
+        <ValidationSummary />
+
+        <div class="mb-3">
+            <label>Naziv predmeta</label>
+            <InputText class="form-control" @bind-Value="model.Name" />
+        </div>
+
+        <div class="mb-3">
+            <label>Šifra predmeta</label>
+            <InputText class="form-control" @bind-Value="model.Code" />
+        </div>
+
+        <div class="mb-3">
+            <label>ESPB bodovi</label>
+            <InputNumber class="form-control" @bind-Value="model.Espb" />
+        </div>
+
+        <div class="mb-3">
+            <label>Semestar</label>
+            <InputNumber class="form-control" @bind-Value="model.Semester" />
+        </div>
+
+        <div class="mb-3">
+            <label>Profesor</label>
+            <InputSelect class="form-control" @bind-Value="model.ProfessorUserId">
+                <option value="">-- izaberi profesora --</option>
+                @foreach (var p in professors)
+                {
+                    <option value="@p.UserId">@p.FirstName @p.LastName (@p.Email)</option>
+                }
+            </InputSelect>
+        </div>
+
+        <button type="submit" class="btn btn-primary">Sačuvaj predmet</button>
+    </EditForm>
+}
+
+@if (!string.IsNullOrEmpty(message))
+{
+    <p class="mt-2">@message</p>
+}
+
+<hr class="my-4" />
+
+<h4>Postojeći predmeti</h4>
+<table class="table">
+    <thead>
+        <tr>
+            <th>Naziv</th>
+            <th>Šifra</th>
+            <th>ESPB</th>
+            <th>Profesor</th>
+            <th>Semestar</th>
+            <th>Akcije</th>
+        </tr>
+    </thead>
+    <tbody>
+        @foreach (var c in courses)
+        {
+            <tr>
+                <td>@c.Name</td>
+                <td>@c.Code</td>
+                <td>@c.Espb</td>
+                <td>@GetProfessorName(c.ProfessorUserId)</td>
+                <td>@c.Semester</td>
+                <td>
+                    <button class="btn btn-sm btn-outline-danger" @onclick="() => DeleteCourse(c)">Obriši</button>
+                </td>
+            </tr>
+        }
+    </tbody>
+</table>
+
+@code {
+    private CourseModel model = new();
+    private string? message;
+    private List<Course> courses = new();
+    private List<UserSummaryDto>? professors;
+
+    protected override async Task OnInitializedAsync()
+    {
+        professors = await UserLookup.GetProfessorsAsync();
+        LoadCourses();
+    }
+
+    private void LoadCourses()
+    {
+        courses = AcademicDb.Courses.OrderBy(c => c.Semester).ToList();
+    }
+
+    private async Task HandleAddCourse()
+    {
+        if (string.IsNullOrEmpty(model.ProfessorUserId))
+        {
+            message = "Izaberi profesora.";
+            return;
+        }
+
+        if (AcademicDb.Courses.Any(c => c.Code == model.Code))
+        {
+            message = "Predmet sa tom šifrom već postoji.";
+            return;
+        }
+
+        var course = new Course
+        {
+            Name = model.Name,
+            Code = model.Code,
+            Espb = model.Espb,
+            Semester = model.Semester,
+            ProfessorUserId = model.ProfessorUserId
+        };
+
+        AcademicDb.Courses.Add(course);
+        await AcademicDb.SaveChangesAsync();
+
+        message = "Predmet uspešno dodat.";
+        model = new();
+        LoadCourses();
+    }
+
+    private async Task DeleteCourse(Course course)
+    {
+        var confirmed = await JS.InvokeAsync<bool>(
+            "confirm", $"Obrisati predmet \"{course.Name}\"? Ovo će obrisati i sve upise studenata na taj predmet.");
+
+        if (!confirmed)
+        {
+            return;
+        }
+
+        AcademicDb.Courses.Remove(course);
+        await AcademicDb.SaveChangesAsync();
+
+        message = $"Predmet \"{course.Name}\" je obrisan.";
+        LoadCourses();
+    }
+
+    private string GetProfessorName(string professorUserId)
+    {
+        var professor = professors?.FirstOrDefault(p => p.UserId == professorUserId);
+        return professor is not null ? $"{professor.FirstName} {professor.LastName}" : "Nepoznat";
+    }
+
+    public class CourseModel
+    {
+        [Required] public string Name { get; set; } = "";
+        [Required] public string Code { get; set; } = "";
+        [Range(1, 20)] public int Espb { get; set; }
+        [Range(1, 8)] public int Semester { get; set; }
+        public string ProfessorUserId { get; set; } = "";
+    }
+
+    
+}

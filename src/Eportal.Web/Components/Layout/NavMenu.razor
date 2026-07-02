@@ -1,28 +1,43 @@
 ﻿<nav class="nav flex-column">
+
     <div class="nav-item px-3">
-        <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
-            <span class="bi bi-house-door-fill-nav-menu" aria-hidden="true"></span> Home
+        <NavLink class="nav-link d-flex align-items-center gap-2" href="" Match="NavLinkMatch.All">
+            <i class="bi bi-house-door-fill fs-5 lh-1"></i>
+            <span>Home</span>
         </NavLink>
     </div>
 
     <AuthorizeView Roles="Administrator,StudentskaSluzba">
         <Authorized>
+
             <div class="nav-item px-3">
-                <NavLink class="nav-link" href="register">
-                    <span class="bi bi-plus-square-fill-nav-menu" aria-hidden="true"></span> Dodaj nalog
+                <NavLink class="nav-link d-flex align-items-center gap-2" href="register">
+                    <i class="bi bi-person-plus-fill fs-5 lh-1"></i>
+                    <span>Dodaj nalog</span>
+                </NavLink>
+            </div>
+
+            <div class="nav-item px-3">
+                <NavLink class="nav-link d-flex align-items-center gap-2" href="courses/add">
+                    <i class="bi bi-book-fill fs-5 lh-1"></i>
+                    <span>Dodaj kurs</span>
                 </NavLink>
             </div>
 
         </Authorized>
     </AuthorizeView>
+
     <AuthorizeView Roles="Administrator">
         <Authorized>
+
             <div class="nav-item px-3">
-                <NavLink class="nav-link" href="users">
-                    <span class="bi bi-plus-square-fill-nav-menu" aria-hidden="true"></span> Korisnici
+                <NavLink class="nav-link d-flex align-items-center gap-2" href="users">
+                    <i class="bi bi-people-fill fs-5 lh-1"></i>
+                    <span>Korisnici</span>
                 </NavLink>
             </div>
 
         </Authorized>
     </AuthorizeView>
+
 </nav>
