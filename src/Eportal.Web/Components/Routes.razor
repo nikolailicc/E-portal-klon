@@ -1,0 +1,13 @@
+﻿<Router AppAssembly="typeof(Program).Assembly" NotFoundPage="typeof(Pages.NotFound)">
+    <Found Context="routeData">
+        <AuthorizeRouteView RouteData="routeData" DefaultLayout="typeof(Layout.MainLayout)">
+            <NotAuthorized>
+                <p>Nemaš dozvolu za pristup ovoj stranici.</p>
+            </NotAuthorized>
+            <Authorizing>
+                <p>Provera dozvole u toku...</p>
+            </Authorizing>
+        </AuthorizeRouteView>
+        <FocusOnNavigate RouteData="routeData" Selector="h1" />
+    </Found>
+</Router>

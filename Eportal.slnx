@@ -1,0 +1,7 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Eportal.Modules.Identity/Eportal.Modules.Identity.csproj" />
+    <Project Path="src/Eportal.Shared/Eportal.Shared.csproj" />
+    <Project Path="src/Eportal.Web/Eportal.Web.csproj" />
+  </Folder>
+</Solution>

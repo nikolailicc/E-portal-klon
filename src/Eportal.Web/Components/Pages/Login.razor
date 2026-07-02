@@ -1,0 +1,62 @@
+﻿@page "/login"
+@using Eportal.Modules.Identity.Domain
+@using Microsoft.AspNetCore.Identity
+@using System.ComponentModel.DataAnnotations
+@inject SignInManager<AppUser> SignInManager
+@inject NavigationManager NavigationManager
+
+<PageTitle>Prijava</PageTitle>
+
+<h3>Prijava</h3>
+
+<EditForm Model="@model" OnValidSubmit="HandleLogin" FormName="login-form">
+    <DataAnnotationsValidator />
+    <ValidationSummary />
+
+    <div class="mb-3">
+        <label>Email</label>
+        <InputText class="form-control" @bind-Value="model.Email" />
+    </div>
+
+    <div class="mb-3">
+        <label>Lozinka</label>
+        <InputText class="form-control" type="password" @bind-Value="model.Password" />
+    </div>
+
+    <button type="submit" class="btn btn-primary">Prijavi se</button>
+</EditForm>
+
+@if (!string.IsNullOrEmpty(resultMessage))
+{
+    <p class="mt-3">@resultMessage</p>
+}
+
+@code {
+    [SupplyParameterFromForm]
+    private LoginModel? model { get; set; }
+
+    protected override void OnInitialized() => model ??= new();
+
+    private string? resultMessage;
+
+    private async Task HandleLogin()
+    {
+        var result = await SignInManager.PasswordSignInAsync(
+            model.Email, model.Password, isPersistent: false, lockoutOnFailure: false);
+
+        if (result.Succeeded)
+        {
+            NavigationManager.NavigateTo("/", forceLoad: true);
+        }
+        else
+        {
+            resultMessage = "Pogrešan email ili lozinka.";
+        }
+    }
+
+    public class LoginModel
+    {
+        [Required][EmailAddress] public string Email { get; set; } = "";
+        [Required] public string Password { get; set; } = "";
+    }
+}
