@@ -52,7 +52,7 @@ Svaki modul je organizovan po slojevima: **Domain** (entiteti), **Application** 
 1. Kloniraj repozitorijum:
 
    ```
-   git clone <url-repozitorijuma>
+   git clone https://github.com/nikolailicc/E-portal-klon
    cd Eportal
    ```
 
