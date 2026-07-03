@@ -5,9 +5,13 @@
 @using Microsoft.AspNetCore.Authorization
 @using Microsoft.AspNetCore.Identity
 @using System.ComponentModel.DataAnnotations
+@using Eportal.Modules.Academic.Domain
+@using Eportal.Modules.Academic.Infrastructure
+@using Microsoft.EntityFrameworkCore
 @inject UserManager<AppUser> UserManager
 @inject AuthenticationStateProvider AuthProvider
 @inject SignInManager<AppUser> SignInManager
+@inject AcademicDbContext AcademicDb
 
 <PageTitle>Moj profil</PageTitle>
 
@@ -19,67 +23,130 @@
 }
 else
 {
-    <h5>Lični podaci</h5>
-    <EditForm Model="@profileModel" OnValidSubmit="HandleUpdateProfile" FormName="profile-form">
-        <DataAnnotationsValidator />
-        <ValidationSummary />
+    <ul class="nav nav-tabs mb-3">
+        <li class="nav-item">
+            <button class="nav-link @(activeTab == "podaci" ? "active" : "")" @onclick='() => activeTab = "podaci"'>
+                Lični podaci
+            </button>
+        </li>
+        <li class="nav-item">
+            <button class="nav-link @(activeTab == "lozinka" ? "active" : "")" @onclick='() => activeTab = "lozinka"'>
+                Promena lozinke
+            </button>
+        </li>
+        @if (studentProfile is not null)
+        {
+            <li class="nav-item">
+                <button class="nav-link @(activeTab == "akademski" ? "active" : "")" @onclick='() => activeTab = "akademski"'>
+                    Akademski profil
+                </button>
+            </li>
+        }
+    </ul>
 
-        <div class="mb-3">
-            <label>Ime</label>
-            <InputText class="form-control" @bind-Value="profileModel.FirstName" />
-        </div>
-
-        <div class="mb-3">
-            <label>Prezime</label>
-            <InputText class="form-control" @bind-Value="profileModel.LastName" />
-        </div>
-
-        <div class="mb-3">
-            <label>Email</label>
-            <input class="form-control" value="@currentUser.Email" disabled />
-        </div>
-
-        <div class="mb-3">
-            <label>Uloga</label>
-            <input class="form-control" value="@currentUser.Role" disabled />
-        </div>
-
-        <button type="submit" class="btn btn-primary">Sačuvaj izmene</button>
-    </EditForm>
-
-    @if (!string.IsNullOrEmpty(profileMessage))
+    @if (activeTab == "podaci")
     {
-        <p class="mt-2">@profileMessage</p>
+        <EditForm Model="@profileModel" OnValidSubmit="HandleUpdateProfile" FormName="profile-form">
+            <DataAnnotationsValidator />
+            <ValidationSummary />
+
+            <div class="mb-3">
+                <label>Ime</label>
+                <InputText class="form-control" @bind-Value="profileModel.FirstName" />
+            </div>
+
+            <div class="mb-3">
+                <label>Prezime</label>
+                <InputText class="form-control" @bind-Value="profileModel.LastName" />
+            </div>
+
+            <div class="mb-3">
+                <label>Email</label>
+                <input class="form-control" value="@currentUser.Email" disabled />
+            </div>
+
+            <div class="mb-3">
+                <label>Uloga</label>
+                <input class="form-control" value="@currentUser.Role" disabled />
+            </div>
+
+            <button type="submit" class="btn btn-primary">Sačuvaj izmene</button>
+        </EditForm>
+
+        @if (!string.IsNullOrEmpty(profileMessage))
+        {
+            <p class="mt-2">@profileMessage</p>
+        }
     }
-
-    <hr class="my-4" />
-
-    <h5>Promena lozinke</h5>
-    <EditForm Model="@passwordModel" OnValidSubmit="HandleChangePassword" FormName="password-form">
-        <DataAnnotationsValidator />
-        <ValidationSummary />
-
-        <div class="mb-3">
-            <label>Trenutna lozinka</label>
-            <InputText class="form-control" type="password" @bind-Value="passwordModel.CurrentPassword" />
-        </div>
-
-        <div class="mb-3">
-            <label>Nova lozinka</label>
-            <InputText class="form-control" type="password" @bind-Value="passwordModel.NewPassword" />
-        </div>
-
-        <div class="mb-3">
-            <label>Potvrdi novu lozinku</label>
-            <InputText class="form-control" type="password" @bind-Value="passwordModel.ConfirmPassword" />
-        </div>
-
-        <button type="submit" class="btn btn-primary">Promeni lozinku</button>
-    </EditForm>
-
-    @if (!string.IsNullOrEmpty(passwordMessage))
+    else if (activeTab == "lozinka")
     {
-        <p class="mt-2">@passwordMessage</p>
+        <EditForm Model="@passwordModel" OnValidSubmit="HandleChangePassword" FormName="password-form">
+            <DataAnnotationsValidator />
+            <ValidationSummary />
+
+            <div class="mb-3">
+                <label>Trenutna lozinka</label>
+                <InputText class="form-control" type="password" @bind-Value="passwordModel.CurrentPassword" />
+            </div>
+
+            <div class="mb-3">
+                <label>Nova lozinka</label>
+                <InputText class="form-control" type="password" @bind-Value="passwordModel.NewPassword" />
+            </div>
+
+            <div class="mb-3">
+                <label>Potvrdi novu lozinku</label>
+                <InputText class="form-control" type="password" @bind-Value="passwordModel.ConfirmPassword" />
+            </div>
+
+            <button type="submit" class="btn btn-primary">Promeni lozinku</button>
+        </EditForm>
+
+        @if (!string.IsNullOrEmpty(passwordMessage))
+        {
+            <p class="mt-2">@passwordMessage</p>
+        }
+    }
+    else if (activeTab == "akademski" && studentProfile is not null)
+    {
+        <table class="table">
+            <tbody>
+                <tr><th>Broj indeksa</th><td>@studentProfile.IndexNumber</td></tr>
+                <tr><th>Studijski program</th><td>@studentProfile.StudyProgram?.Name</td></tr>
+                <tr><th>Status</th><td>@studentProfile.Status</td></tr>
+                <tr><th>ESPB</th><td>@studentProfile.Espb</td></tr>
+            </tbody>
+        </table>
+
+        <h6>Upisani predmeti</h6>
+        @if (enrolledCourses.Count == 0)
+        {
+            <p>Nema upisanih predmeta.</p>
+        }
+        else
+        {
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Naziv</th>
+                        <th>Šifra</th>
+                        <th>ESPB</th>
+                        <th>Semestar</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var c in enrolledCourses)
+                    {
+                        <tr>
+                            <td>@c.Name</td>
+                            <td>@c.Code</td>
+                            <td>@c.Espb</td>
+                            <td>@c.Semester</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
     }
 }
 
@@ -89,6 +156,9 @@ else
     private PasswordModel passwordModel = new();
     private string? profileMessage;
     private string? passwordMessage;
+    private Student? studentProfile;
+    private List<Course> enrolledCourses = new();
+    private string activeTab = "podaci";
 
     protected override async Task OnInitializedAsync()
     {
@@ -99,6 +169,18 @@ else
         {
             profileModel.FirstName = currentUser.FirstName;
             profileModel.LastName = currentUser.LastName;
+
+            studentProfile = await AcademicDb.Students
+                .Include(s => s.StudyProgram)
+                .FirstOrDefaultAsync(s => s.UserId == currentUser.Id);
+
+            if (studentProfile is not null)
+            {
+                enrolledCourses = await AcademicDb.Enrollments
+                    .Where(e => e.StudentId == studentProfile.Id)
+                    .Select(e => e.Course)
+                    .ToListAsync();
+            }
         }
     }
 

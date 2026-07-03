@@ -6,10 +6,10 @@ Eportal digitalizuje ključne administrativne i akademske procese na fakultetu: 
 
 ## Tehnologije
 
-- **Backend:** ASP.NET Core 10, C#
+- **Backend:** ASP.NET Core 10, C# (bez zasebnog Web API sloja — logika živi unutar Blazor Server aplikacije i modula)
 - **Frontend:** Blazor Server
-- **Baza podataka:** MySQL + Entity Framework Core 9
-- **Autentifikacija:** ASP.NET Core Identity + role-based autorizacija
+- **Baza podataka:** MySQL + Entity Framework Core 9 (Pomelo provajder)
+- **Autentifikacija:** ASP.NET Core Identity (cookie-based) + role-based autorizacija
 
 ## Arhitektura
 
@@ -19,26 +19,23 @@ Projekat je organizovan kao **modularni monolit** — jedna aplikacija sa jasno 
 Eportal.sln
 ├── src/
 │   ├── Eportal.Web                    → Blazor Server frontend
-│   ├── Eportal.Shared                 → zajednički DTO modeli i kontrakti
+│   ├── Eportal.Shared                 → zajednički DTO modeli i kontrakti (npr. UserSummaryDto, IUserLookupService)
 │   ├── Eportal.Modules.Identity       → autentifikacija, autorizacija, korisnici i uloge
-│   ├── Eportal.Modules.Academic       → profil studenta, predmeti, upis        (u planu)
+│   ├── Eportal.Modules.Academic       → studenti, predmeti, studijski programi, upisi
 │   ├── Eportal.Modules.Exams          → ispitni rokovi, prijava, ocene         (u planu)
 │   └── Eportal.Modules.Requests       → digitalna studentska služba, dokumenta (u planu)
 ```
 
-Svaki modul je organizovan po slojevima: **Domain** (entiteti), **Application** (poslovna logika) i **Infrastructure** (baza, eksterni servisi).
+Svaki modul je organizovan po slojevima: **Domain** (entiteti), **Application** (poslovna logika, po potrebi) i **Infrastructure** (baza, eksterni servisi). Kad jednom modulu treba podatak iz drugog (npr. Academic modulu ime profesora iz Identity modula), koristi se labava veza preko `Eportal.Shared` (zajednički DTO + interfejs), a ne direktna referenca između modula — svaki modul ostaje nezavisno razvojna celina.
 
 ## Trenutni status
 
 - [x] Solution struktura i moduli povezani referencama
-- [x] `AppUser` entitet (nasleđuje `IdentityUser`) + `UserRole` enum
-- [x] EF Core `IdentityDbContext` + MySQL konekcija, migracije primenjene
-- [x] Registracija, login i logout — end-to-end
-- [x] Seed 4 osnovne uloge (Student, Profesor, StudentskaSluzba, Administrator)
-- [x] Zaštita ruta po ulogama (`[Authorize(Roles = "...")]`)
-- [ ] Academic modul
-- [ ] Exams modul
-- [ ] Requests & Documents modul
+- [x] **Identity modul — gotov**: registracija (zaključana za Administratora/Studentsku službu), login/logout, 4 uloge (Student, Profesor, StudentskaSluzba, Administrator), zaštita ruta po ulogama, upravljanje korisnicima (promena uloge, aktivacija/deaktivacija/brisanje naloga), lični profil sa promenom lozinke
+- [x] **Academic modul — gotov**: studijski programi (CRUD), predmeti (dodavanje/izmena/brisanje, vezani za više studijskih programa), upis studenata na predmete, lista predmeta filtrirana po ulozi (student vidi svoje upisane, profesor svoje predmete, admin/služba sve), akademski deo profila studenta (broj indeksa, program, status, upisani predmeti)
+- [ ] Exams modul — ispitni rokovi, prijava/odjava ispita, unos ocena
+- [ ] Requests & Documents modul — digitalna studentska služba, generisanje PDF potvrda
+- [ ] Prosek studenta na profilu (čeka Exams modul, zavisi od unetih ocena)
 
 ## Pokretanje projekta lokalno
 
@@ -66,10 +63,12 @@ Svaki modul je organizovan po slojevima: **Domain** (entiteti), **Application** 
    }
    ```
 
-3. Primeni EF Core migracije:
+3. Primeni EF Core migracije — projekat ima **dva odvojena `DbContext`-a** nad istom bazom (`IdentityDbContext` i `AcademicDbContext`), pa je potrebno primeniti migracije za oba, uz eksplicitno naveden `--context`:
 
    ```
-   dotnet ef database update --project src/Eportal.Modules.Identity/Eportal.Modules.Identity.csproj --startup-project src/Eportal.Web/Eportal.Web.csproj
+   dotnet ef database update --context IdentityDbContext --project src/Eportal.Modules.Identity/Eportal.Modules.Identity.csproj --startup-project src/Eportal.Web/Eportal.Web.csproj
+
+   dotnet ef database update --context AcademicDbContext --project src/Eportal.Modules.Academic/Eportal.Modules.Academic.csproj --startup-project src/Eportal.Web/Eportal.Web.csproj
    ```
 
 4. Pokreni aplikaciju:
@@ -77,13 +76,16 @@ Svaki modul je organizovan po slojevima: **Domain** (entiteti), **Application** 
    dotnet run --project src/Eportal.Web/Eportal.Web.csproj
    ```
 
-Pri prvom pokretanju aplikacija automatski seed-uje osnovne uloge u bazu.
+Pri prvom pokretanju aplikacija automatski seed-uje 4 osnovne uloge i administratorski nalog:
+
+- **Email:** `admin@eportal.local`
+- **Lozinka:** `Admin123!`
 
 ## Struktura po ulogama
 
-| Uloga             | Mogućnosti                                                  |
-| ----------------- | ----------------------------------------------------------- |
-| Student           | Profil, predmeti, prijava ispita, ocene, zahtevi, dokumenti |
-| Profesor          | Svoji predmeti, prijave, unos ocena                         |
-| Studentska služba | Upravljanje studentima, obrada zahteva, ispitni rokovi      |
-| Administrator     | Upravljanje korisnicima i ulogama                           |
+| Uloga             | Mogućnosti                                                                                    |
+| ----------------- | --------------------------------------------------------------------------------------------- |
+| Student           | Lični i akademski profil, pregled upisanih predmeta                                           |
+| Profesor          | Pregled i izmena svojih predmeta                                                              |
+| Studentska služba | Dodavanje naloga (Student/Profesor), predmeti, upis studenata na predmete, studijski programi |
+| Administrator     | Sve navedeno + upravljanje korisnicima (uloge, aktivacija/deaktivacija/brisanje naloga)       |
