@@ -45,6 +45,16 @@ else
                             }
                         </select>
                     </td>
+                    
+                    @if (isLocked)
+                    {
+                        <td>Deaktiviran</td>
+                    }
+                    else
+                    {   
+                        <td>Aktiviran</td>
+                    }
+
                     <td>
                         @if (isLocked)
                         {
