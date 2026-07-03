@@ -5,6 +5,7 @@
 @using Microsoft.AspNetCore.Authorization
 @using Microsoft.AspNetCore.Identity
 @inject UserManager<AppUser> UserManager
+@inject IJSRuntime JS
 
 <PageTitle>Korisnici</PageTitle>
 
@@ -44,16 +45,16 @@ else
                             }
                         </select>
                     </td>
-                    <td>@(isLocked ? "Deaktiviran" : "Aktivan")</td>
                     <td>
                         @if (isLocked)
                         {
-                            <button class="btn btn-sm btn-outline-success" @onclick="() => Activate(u)">Aktiviraj</button>
+                            <button class="btn btn-sm btn-outline-success me-1" @onclick="() => Activate(u)">Aktiviraj</button>
                         }
                         else
                         {
-                            <button class="btn btn-sm btn-outline-danger" @onclick="() => Deactivate(u)">Deaktiviraj</button>
+                            <button class="btn btn-sm btn-outline-danger me-1" @onclick="() => Deactivate(u)">Deaktiviraj</button>
                         }
+                        <button class="btn btn-sm btn-outline-dark" @onclick="() => Delete(u)">Obriši</button>
                     </td>
                 </tr>
             }
@@ -108,4 +109,20 @@ else
         message = $"Korisnik {user.Email} je aktiviran.";
         LoadUsers();
     }
+    private async Task Delete(AppUser user)
+    {
+        var confirmed = await JS.InvokeAsync<bool>(
+            "confirm", $"Trajno obrisati korisnika {user.Email}? Ova akcija se ne može poništiti.");
+
+        if (!confirmed)
+        {
+            return;
+        }
+
+        await UserManager.DeleteAsync(user);
+
+        message = $"Korisnik {user.Email} je obrisan.";
+        LoadUsers();
+    }
+
 }

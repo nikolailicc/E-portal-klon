@@ -1,0 +1,110 @@
+﻿@page "/study-programs"
+@attribute [Authorize(Roles = "Administrator")]
+@rendermode InteractiveServer
+@using Eportal.Modules.Academic.Domain
+@using Eportal.Modules.Academic.Infrastructure
+@using Microsoft.AspNetCore.Authorization
+@using System.ComponentModel.DataAnnotations
+@inject AcademicDbContext AcademicDb
+@inject IJSRuntime JS
+
+
+<PageTitle>Studijski programi</PageTitle>
+
+<h3>Studijski programi</h3>
+
+<EditForm Model="@model" OnValidSubmit="HandleAdd" FormName="add-program-form">
+    <DataAnnotationsValidator />
+    <ValidationSummary />
+
+    <div class="row">
+        <div class="col-md-8 mb-3">
+            <InputText class="form-control" @bind-Value="model.Name" placeholder="Naziv programa" />
+        </div>
+        <div class="col-md-4 mb-3">
+            <button type="submit" class="btn btn-primary">Dodaj program</button>
+        </div>
+    </div>
+</EditForm>
+
+@if (!string.IsNullOrEmpty(message))
+{
+    <p class="mt-2">@message</p>
+}
+
+<table class="table">
+    <thead>
+        <tr>
+            <th>Naziv</th>
+            <th>Akcije</th>
+        </tr>
+    </thead>
+    <tbody>
+        @foreach (var p in programs)
+        {
+            <tr>
+                <td>@p.Name</td>
+                <td>
+                    <button class="btn btn-sm btn-outline-danger" @onclick="() => Delete(p)">Obriši</button>
+                </td>
+            </tr>
+        }
+    </tbody>
+</table>
+
+@code {
+    private List<StudyProgram> programs = new();
+    private ProgramModel model = new();
+    private string? message;
+
+    protected override void OnInitialized()
+    {
+        LoadPrograms();
+    }
+
+    private void LoadPrograms()
+    {
+        programs = AcademicDb.StudyPrograms.OrderBy(p => p.Name).ToList();
+    }
+
+    private async Task HandleAdd()
+    {
+        if (AcademicDb.StudyPrograms.Any(p => p.Name == model.Name))
+        {
+            message = "Program sa tim nazivom već postoji.";
+            return;
+        }
+
+        AcademicDb.StudyPrograms.Add(new StudyProgram { Name = model.Name });
+        await AcademicDb.SaveChangesAsync();
+
+        message = "Program dodat.";
+        model = new();
+        LoadPrograms();
+    }
+
+    private async Task Delete(StudyProgram program)
+    {
+        var inUse = AcademicDb.Students.Any(s => s.StudyProgramId == program.Id);
+
+        if (inUse)
+        {
+            message = "Ne može se obrisati program koji ima upisane studente.";
+            return;
+        }
+
+        var confirmed = await JS.InvokeAsync<bool>("confirm", $"Obrisati program \"{program.Name}\"?");
+        if (!confirmed) return;
+
+        AcademicDb.StudyPrograms.Remove(program);
+        await AcademicDb.SaveChangesAsync();
+
+        message = "Program obrisan.";
+        LoadPrograms();
+    }
+
+    public class ProgramModel
+    {
+        [Required] public string Name { get; set; } = "";
+    }
+}

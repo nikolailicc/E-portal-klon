@@ -1,0 +1,209 @@
+﻿@page "/courses"
+@* Dozvoljavamo pristup svim ulogovanim korisnicima *@
+@attribute [Authorize]
+@rendermode InteractiveServer
+
+@using Eportal.Modules.Academic.Domain
+@using Eportal.Modules.Academic.Infrastructure
+@using Eportal.Shared
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.EntityFrameworkCore
+@using System.Security.Claims
+
+@inject AcademicDbContext AcademicDb
+@inject IUserLookupService UserLookup
+@inject IJSRuntime JS
+@inject NavigationManager Navigation
+@* Injektujemo AuthenticationStateProvider da bismo znali ko je trenutno ulogovan *@
+@inject AuthenticationStateProvider AuthStateProvider
+
+<PageTitle>Predmeti</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h3>Lista predmeta</h3>
+
+
+    @* Samo Admin i Studentska Sluzba vide dugme za dodavanje *@
+    <AuthorizeView Roles="Administrator,StudentskaSluzba">
+        <Authorized>
+            <a class="btn btn-primary" href="/courses/add">Dodaj novi predmet</a>
+        </Authorized>
+    </AuthorizeView>
+</div>
+
+@if (!string.IsNullOrEmpty(message))
+{
+    <div class="alert alert-info">@message</div>
+}
+
+@if (professors is null)
+{
+    <p>Učitavanje...</p>
+}
+else
+{
+    <table class="table table-striped table-hover">
+        <thead>
+            <tr>
+                <th>Naziv</th>
+                <th>Šifra</th>
+                <th>ESPB</th>
+                <th>Profesor</th>
+                <th>Semestar</th>
+                <th>Programi</th>
+                @* Kolona Akcije se vidi samo ako korisnik nije student *@
+                <AuthorizeView Roles="Administrator,StudentskaSluzba,Profesor">
+                    <Authorized>
+                        <th style="width: 180px;">Akcije</th>
+                    </Authorized>
+                </AuthorizeView>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var c in courses)
+            {
+                <tr>
+                    <td>@c.Name</td>
+                    <td>@c.Code</td>
+                    <td><span class="badge bg-secondary">@c.Espb</span></td>
+                    <td>@GetProfessorName(c.ProfessorUserId)</td>
+                    <td>@c.Semester</td>
+                    <td>@GetProgramNames(c.Id)</td>
+
+                    <AuthorizeView Roles="Administrator,StudentskaSluzba,Profesor">
+                        <Authorized Context="authContext">
+                            <td>
+                                @* Edit dugme sa pametnim poređenjem stringova *@
+                                @if (authContext.User.IsInRole("Administrator") ||
+                                     authContext.User.IsInRole("StudentskaSluzba") ||
+                                     (c.ProfessorUserId != null && c.ProfessorUserId.Equals(currentUserId, StringComparison.OrdinalIgnoreCase)))
+                                {
+                                    <button class="btn btn-sm btn-warning me-2" @onclick="() => RedirectToEdit(c.Id)">
+                                        <i class="bi bi-pencil"></i> Izmeni
+                                    </button>
+                                }
+
+                                @if (authContext.User.IsInRole("Administrator") ||
+                                     authContext.User.IsInRole("StudentskaSluzba"))
+                                {
+                                    <button class="btn btn-sm btn-danger" @onclick="() => DeleteCourse(c)">
+                                        <i class="bi bi-trash"></i> Obriši
+                                    </button>
+                                }
+                            </td>
+                        </Authorized>
+                    </AuthorizeView>
+                 </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    private string? currentUserId; 
+    private string? message;
+    private List<Course> courses = new();
+    private List<UserSummaryDto>? professors;
+    private List<CourseStudyProgram> courseStudyProgramLinks = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        professors = await UserLookup.GetProfessorsAsync();
+        await LoadCourses();
+    }
+
+    private async Task LoadCourses()
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+
+        // Uzimamo ID i pretvaramo u mala slova radi sigurnog poređenja
+        currentUserId = user.FindFirst(ClaimTypes.NameIdentifier)?.Value?.ToLowerInvariant();
+
+        if (user.IsInRole("Student") && !string.IsNullOrEmpty(currentUserId))
+        {
+            var student = await AcademicDb.Set<Student>()
+                .AsNoTracking()
+                .FirstOrDefaultAsync(s => s.UserId.ToLower() == currentUserId);
+
+            if (student != null)
+            {
+                courses = AcademicDb.Courses
+                    .AsNoTracking()
+                    .Where(c => AcademicDb.Set<Enrollment>().Any(e => e.StudentId == student.Id && e.CourseId == c.Id))
+                    .OrderBy(x => x.Semester)
+                    .ToList();
+            }
+            else
+            {
+                courses = new List<Course>();
+            }
+        }
+        else if (user.IsInRole("Profesor") && !string.IsNullOrEmpty(currentUserId))
+        {
+            // OPCIJA A: Ako želiš da profesor na listi vidi SAMO svoje predmete:
+            courses = AcademicDb.Courses
+                .AsNoTracking()
+                .Where(x => x.ProfessorUserId.ToLower() == currentUserId)
+                .OrderBy(x => x.Semester)
+                .ToList();
+
+            // OPCIJA B: Ako želiš da vidi sve predmete, ali da edituje samo svoje,
+            // ostavi samo ovaj donji blok iz else-a i za profesore.
+        }
+        else
+        {
+            // Admini i Služba vide sve
+            courses = AcademicDb.Courses
+                .AsNoTracking()
+                .OrderBy(x => x.Semester)
+                .ToList();
+        }
+
+        courseStudyProgramLinks = AcademicDb.CourseStudyPrograms
+            .AsNoTracking()
+            .Include(x => x.StudyProgram)
+            .ToList();
+    }
+    
+    private string GetProfessorName(string userId)
+    {
+        var p = professors?.FirstOrDefault(x => x.UserId == userId);
+        return p != null ? $"{p.FirstName} {p.LastName}" : "Nepoznat";
+    }
+
+    private string GetProgramNames(int courseId)
+    {
+        return string.Join(", ",
+            courseStudyProgramLinks
+                .Where(x => x.CourseId == courseId)
+                .Select(x => x.StudyProgram.Name));
+    }
+
+    private void RedirectToEdit(int courseId)
+    {
+        Navigation.NavigateTo($"/courses/edit/{courseId}");
+    }
+
+    private async Task DeleteCourse(Course course)
+    {
+        var ok = await JS.InvokeAsync<bool>("confirm", $"Da li ste sigurni da želite da obrišete predmet \"{course.Name}\"?");
+        if (!ok) return;
+
+        var dbCourse = await AcademicDb.Courses
+            .FirstOrDefaultAsync(x => x.Id == course.Id);
+
+        if (dbCourse == null) return;
+
+        var links = AcademicDb.CourseStudyPrograms
+            .Where(x => x.CourseId == dbCourse.Id);
+
+        AcademicDb.CourseStudyPrograms.RemoveRange(links);
+        AcademicDb.Courses.Remove(dbCourse);
+
+        await AcademicDb.SaveChangesAsync();
+
+        message = $"Predmet \"{course.Name}\" je uspešno obrisan.";
+        await LoadCourses();
+    }
+}

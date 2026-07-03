@@ -1,10 +1,14 @@
 ﻿@page "/register"
 @attribute [Authorize(Roles = "Administrator,StudentskaSluzba")]
+@rendermode InteractiveServer
+@using Eportal.Modules.Academic.Domain
+@using Eportal.Modules.Academic.Infrastructure
 @using Eportal.Modules.Identity.Domain
 @using Microsoft.AspNetCore.Authorization
 @using Microsoft.AspNetCore.Identity
 @using System.ComponentModel.DataAnnotations
 @inject UserManager<AppUser> UserManager
+@inject AcademicDbContext AcademicDb
 
 <PageTitle>Registracija</PageTitle>
 
@@ -44,6 +48,25 @@
         </InputSelect>
     </div>
 
+    @if (model.Role == UserRole.Student)
+    {
+        <div class="mb-3">
+            <label>Broj indeksa</label>
+            <InputText class="form-control" @bind-Value="model.IndexNumber" />
+        </div>
+
+        <div class="mb-3">
+            <label>Studijski program</label>
+            <InputSelect class="form-control" @bind-Value="model.StudyProgramId">
+                <option value="0">-- izaberi program --</option>
+                @foreach (var sp in studyPrograms)
+                {
+                    <option value="@sp.Id">@sp.Name</option>
+                }
+            </InputSelect>
+        </div>
+    }
+
     <button type="submit" class="btn btn-primary">Registruj se</button>
 </EditForm>
 
@@ -59,8 +82,8 @@
     [SupplyParameterFromForm]
     private RegisterModel? model { get; set; }
 
-    private bool isAdmin;
     private List<UserRole> allowedRoles = new();
+    private List<StudyProgram> studyPrograms = new();
     private string? resultMessage;
 
     protected override async Task OnInitializedAsync()
@@ -68,7 +91,7 @@
         model ??= new();
 
         var authState = await AuthStateTask!;
-        isAdmin = authState.User.IsInRole("Administrator");
+        var isAdmin = authState.User.IsInRole("Administrator");
 
         allowedRoles = isAdmin
             ? new List<UserRole> { UserRole.Student, UserRole.Profesor, UserRole.StudentskaSluzba, UserRole.Administrator }
@@ -78,6 +101,8 @@
         {
             model.Role = allowedRoles[0];
         }
+
+        studyPrograms = AcademicDb.StudyPrograms.ToList();
     }
 
     private async Task HandleRegister()
@@ -85,6 +110,13 @@
         if (!allowedRoles.Contains(model!.Role))
         {
             resultMessage = "Nemaš dozvolu da dodeliš tu ulogu.";
+            return;
+        }
+
+        if (model.Role == UserRole.Student &&
+            (string.IsNullOrWhiteSpace(model.IndexNumber) || model.StudyProgramId == 0))
+        {
+            resultMessage = "Za studenta je obavezan broj indeksa i studijski program.";
             return;
         }
 
@@ -99,15 +131,30 @@
 
         var result = await UserManager.CreateAsync(user, model.Password);
 
-        if (result.Succeeded)
-        {
-            await UserManager.AddToRoleAsync(user, user.Role.ToString());
-            resultMessage = "Uspešno registrovan korisnik!";
-        }
-        else
+        if (!result.Succeeded)
         {
             resultMessage = string.Join(", ", result.Errors.Select(e => e.Description));
+            return;
         }
+
+        await UserManager.AddToRoleAsync(user, user.Role.ToString());
+
+        if (model.Role == UserRole.Student)
+        {
+            AcademicDb.Students.Add(new Student
+            {
+                UserId = user.Id,
+                IndexNumber = model.IndexNumber,
+                StudyProgramId = model.StudyProgramId,
+                Espb = 0,
+                Status = StudentStatus.Aktivan
+            });
+
+            await AcademicDb.SaveChangesAsync();
+        }
+
+        resultMessage = "Uspešno registrovan korisnik!";
+        model = new();
     }
 
     public class RegisterModel
@@ -117,5 +164,7 @@
         [Required][EmailAddress] public string Email { get; set; } = "";
         [Required] public string Password { get; set; } = "";
         public UserRole Role { get; set; } = UserRole.Student;
+        public string IndexNumber { get; set; } = "";
+        public int StudyProgramId { get; set; }
     }
 }

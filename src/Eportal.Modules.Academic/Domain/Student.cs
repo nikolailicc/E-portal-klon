@@ -7,7 +7,8 @@ public class Student
     public string UserId { get; set; } = string.Empty;
 
     public string IndexNumber { get; set; } = string.Empty;
-    public string StudyProgram { get; set; } = string.Empty;
+    public int StudyProgramId { get; set; }
+    public StudyProgram StudyProgram { get; set; } = null!;
     public int Espb { get; set; }
     public StudentStatus Status { get; set; } = StudentStatus.Aktivan;
 }

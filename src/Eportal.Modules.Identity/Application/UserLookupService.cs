@@ -33,4 +33,15 @@ public class UserLookupService : IUserLookupService
             .Select(p => new UserSummaryDto(p.Id, p.FirstName, p.LastName, p.Email ?? ""))
             .ToList();
     }
+    public async Task<UserSummaryDto?> FindByUserIdAsync(string userId)
+    {
+        var user = await _userManager.FindByIdAsync(userId);
+
+        if (user is null)
+        {
+            return null;
+        }
+
+        return new UserSummaryDto(user.Id, user.FirstName, user.LastName, user.Email ?? "");
+    }
 }

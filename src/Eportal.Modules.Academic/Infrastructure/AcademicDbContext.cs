@@ -13,6 +13,9 @@ public class AcademicDbContext : DbContext
     public DbSet<Student> Students => Set<Student>();
     public DbSet<Course> Courses => Set<Course>();
     public DbSet<Enrollment> Enrollments => Set<Enrollment>();
+    public DbSet<StudyProgram> StudyPrograms => Set<StudyProgram>();
+
+    public DbSet<CourseStudyProgram> CourseStudyPrograms => Set<CourseStudyProgram>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -43,5 +46,27 @@ public class AcademicDbContext : DbContext
             .HasOne(e => e.Course)
             .WithMany()
             .HasForeignKey(e => e.CourseId);
+
+        modelBuilder.Entity<StudyProgram>()
+            .HasIndex(sp => sp.Name)
+            .IsUnique();
+
+        modelBuilder.Entity<Student>()
+            .HasOne(s => s.StudyProgram)
+            .WithMany()
+            .HasForeignKey(s => s.StudyProgramId);
+
+        modelBuilder.Entity<CourseStudyProgram>()
+            .HasKey(csp => new { csp.CourseId, csp.StudyProgramId });
+
+        modelBuilder.Entity<CourseStudyProgram>()
+            .HasOne(csp => csp.Course)
+            .WithMany()
+            .HasForeignKey(csp => csp.CourseId);
+
+        modelBuilder.Entity<CourseStudyProgram>()
+            .HasOne(csp => csp.StudyProgram)
+            .WithMany()
+            .HasForeignKey(csp => csp.StudyProgramId);
     }
 }

@@ -1,0 +1,173 @@
+﻿@page "/enroll"
+@attribute [Authorize(Roles = "Administrator,StudentskaSluzba")]
+@rendermode InteractiveServer
+@using Eportal.Modules.Academic.Domain
+@using Eportal.Modules.Academic.Infrastructure
+@using Eportal.Shared
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.EntityFrameworkCore
+@inject AcademicDbContext AcademicDb
+@inject IUserLookupService UserLookup
+
+<PageTitle>Upis studenata</PageTitle>
+
+<h3>Upis studenta na predmet</h3>
+
+@if (students is null || courses is null)
+{
+    <p>Učitavanje...</p>
+}
+else if (students.Count == 0)
+{
+    <p>Nema registrovanih studenata.</p>
+}
+else if (courses.Count == 0)
+{
+    <p>Nema unetih predmeta. Prvo dodaj predmet.</p>
+}
+else
+{
+    <div class="row">
+        <div class="col-md-5 mb-3">
+            <label>Student</label>
+            <select class="form-control" @bind="selectedStudentId">
+                <option value="0">-- izaberi studenta --</option>
+                @foreach (var s in students)
+                {
+                    <option value="@s.Id">@GetStudentName(s) (@s.IndexNumber)</option>
+                }
+            </select>
+        </div>
+
+        <div class="col-md-5 mb-3">
+            <label>Predmet</label>
+            <select class="form-control" @bind="selectedCourseId">
+                <option value="0">-- izaberi predmet --</option>
+                @foreach (var c in courses)
+                {
+                    <option value="@c.Id">@c.Name (@c.Code)</option>
+                }
+            </select>
+        </div>
+
+        <div class="col-md-2 mb-3 d-flex align-items-end">
+            <button class="btn btn-primary" @onclick="HandleEnroll">Upiši</button>
+        </div>
+    </div>
+}
+
+@if (!string.IsNullOrEmpty(message))
+{
+    <p class="mt-2">@message</p>
+}
+
+<hr class="my-4" />
+
+<h4>Postojeći upisi</h4>
+<table class="table">
+    <thead>
+        <tr>
+            <th>Student</th>
+            <th>Predmet</th>
+            <th>Datum upisa</th>
+            <th>Akcije</th>
+        </tr>
+    </thead>
+    <tbody>
+        @foreach (var e in enrollments)
+        {
+            <tr>
+                <td>@GetStudentName(e.Student) (@e.Student.IndexNumber)</td>
+                <td>@e.Course.Name</td>
+                <td>@e.EnrolledAt.ToLocalTime().ToString("dd.MM.yyyy")</td>
+                <td>
+                    <button class="btn btn-sm btn-outline-danger" @onclick="() => RemoveEnrollment(e)">Ukloni</button>
+                </td>
+            </tr>
+        }
+    </tbody>
+</table>
+
+@code {
+    private List<Student>? students;
+    private List<Course>? courses;
+    private List<Enrollment> enrollments = new();
+    private Dictionary<string, UserSummaryDto> userLookupCache = new();
+
+    private int selectedStudentId;
+    private int selectedCourseId;
+    private string? message;
+
+    protected override async Task OnInitializedAsync()
+    {
+        students = AcademicDb.Students.ToList();
+        courses = AcademicDb.Courses.ToList();
+
+        foreach (var s in students)
+        {
+            var user = await UserLookup.FindByUserIdAsync(s.UserId);
+            if (user is not null)
+            {
+                userLookupCache[s.UserId] = user;
+            }
+        }
+
+        LoadEnrollments();
+    }
+
+    private void LoadEnrollments()
+    {
+        enrollments = AcademicDb.Enrollments
+            .Include(e => e.Student)
+            .Include(e => e.Course)
+            .ToList();
+    }
+
+    private string GetStudentName(Student student)
+    {
+        return userLookupCache.TryGetValue(student.UserId, out var user)
+            ? $"{user.FirstName} {user.LastName}"
+            : "Nepoznat";
+    }
+
+    private async Task HandleEnroll()
+    {
+        if (selectedStudentId == 0 || selectedCourseId == 0)
+        {
+            message = "Izaberi i studenta i predmet.";
+            return;
+        }
+
+        var alreadyEnrolled = AcademicDb.Enrollments.Any(e =>
+            e.StudentId == selectedStudentId && e.CourseId == selectedCourseId);
+
+        if (alreadyEnrolled)
+        {
+            message = "Student je već upisan na taj predmet.";
+            return;
+        }
+
+        AcademicDb.Enrollments.Add(new Enrollment
+        {
+            StudentId = selectedStudentId,
+            CourseId = selectedCourseId,
+            EnrolledAt = DateTime.UtcNow
+        });
+
+        await AcademicDb.SaveChangesAsync();
+
+        message = "Student uspešno upisan na predmet.";
+        selectedStudentId = 0;
+        selectedCourseId = 0;
+        LoadEnrollments();
+    }
+
+    private async Task RemoveEnrollment(Enrollment enrollment)
+    {
+        AcademicDb.Enrollments.Remove(enrollment);
+        await AcademicDb.SaveChangesAsync();
+
+        message = "Upis je uklonjen.";
+        LoadEnrollments();
+    }
+}
