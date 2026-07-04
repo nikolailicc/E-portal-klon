@@ -1,5 +1,6 @@
 
 using Eportal.Modules.Academic.Infrastructure;
+using Eportal.Modules.Exams.Infrastructure;
 using Eportal.Modules.Identity.Application;
 using Eportal.Modules.Identity.Domain;
 using Eportal.Modules.Identity.Infrastructure;
@@ -22,6 +23,12 @@ builder.Services.AddDbContext<IdentityDbContext>(options =>
     ));
 
 builder.Services.AddDbContext<AcademicDbContext>(options =>
+    options.UseMySql(
+        builder.Configuration.GetConnectionString("DefaultConnection"),
+        ServerVersion.AutoDetect(builder.Configuration.GetConnectionString("DefaultConnection"))
+    ));
+
+builder.Services.AddDbContext<ExamsDbContext>(options =>
     options.UseMySql(
         builder.Configuration.GetConnectionString("DefaultConnection"),
         ServerVersion.AutoDetect(builder.Configuration.GetConnectionString("DefaultConnection"))

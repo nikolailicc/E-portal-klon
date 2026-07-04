@@ -1,0 +1,191 @@
+﻿@page "/exams/schedule"
+@attribute [Authorize(Roles = "Administrator,StudentskaSluzba")]
+@rendermode InteractiveServer
+@using Eportal.Modules.Academic.Domain
+@using Eportal.Modules.Academic.Infrastructure
+@using Eportal.Modules.Exams.Domain
+@using Eportal.Modules.Exams.Infrastructure
+@using Microsoft.AspNetCore.Authorization
+@using System.ComponentModel.DataAnnotations
+@inject ExamsDbContext ExamsDb
+@inject AcademicDbContext AcademicDb
+@inject IJSRuntime JS
+
+<PageTitle>Ispiti</PageTitle>
+
+<h3>Zakazivanje ispita</h3>
+
+@if (periods.Count == 0)
+{
+    <p>Nema unetih ispitnih rokova. Prvo dodaj rok na stranici "Ispitni rokovi".</p>
+}
+else if (courses.Count == 0)
+{
+    <p>Nema unetih predmeta.</p>
+}
+else
+{
+    <EditForm Model="@model" OnValidSubmit="HandleAdd" FormName="add-exam-form">
+        <DataAnnotationsValidator />
+        <ValidationSummary />
+
+        <div class="mb-3">
+            <label>Ispitni rok</label>
+            <InputSelect class="form-control" @bind-Value="model.ExamPeriodId">
+                <option value="0">-- izaberi rok --</option>
+                @foreach (var p in periods)
+                {
+                    <option value="@p.Id">@p.Name (@p.StartDate.ToString("dd.MM.yyyy") - @p.EndDate.ToString("dd.MM.yyyy"))</option>
+                }
+            </InputSelect>
+        </div>
+
+        <div class="mb-3">
+            <label>Predmet</label>
+            <InputSelect class="form-control" @bind-Value="model.CourseId">
+                <option value="0">-- izaberi predmet --</option>
+                @foreach (var c in courses)
+                {
+                    <option value="@c.Id">@c.Name (@c.Code)</option>
+                }
+            </InputSelect>
+        </div>
+
+        <div class="mb-3">
+            <label>Datum ispita</label>
+            <InputDate class="form-control" @bind-Value="model.ExamDate" />
+        </div>
+
+        <button type="submit" class="btn btn-primary">Zakaži ispit</button>
+    </EditForm>
+}
+
+@if (!string.IsNullOrEmpty(message))
+{
+    <p class="mt-2">@message</p>
+}
+
+<hr class="my-4" />
+
+<h4>Zakazani ispiti</h4>
+<table class="table">
+    <thead>
+        <tr>
+            <th>Rok</th>
+            <th>Predmet</th>
+            <th>Datum</th>
+            <th>Akcije</th>
+        </tr>
+    </thead>
+    <tbody>
+        @foreach (var e in exams)
+        {
+            <tr>
+                <td>@GetPeriodName(e.ExamPeriodId)</td>
+                <td>@GetCourseName(e.CourseId)</td>
+                <td>@e.ExamDate.ToString("dd.MM.yyyy")</td>
+                <td>
+                    <button class="btn btn-sm btn-outline-danger" @onclick="() => DeleteExam(e)">Obriši</button>
+                </td>
+            </tr>
+        }
+    </tbody>
+</table>
+
+@code {
+    private List<ExamPeriod> periods = new();
+    private List<Course> courses = new();
+    private List<Exam> exams = new();
+    private ExamModel model = new();
+    private string? message;
+
+    protected override void OnInitialized()
+    {
+        periods = ExamsDb.ExamPeriods.OrderBy(p => p.StartDate).ToList();
+        courses = AcademicDb.Courses.ToList();
+        LoadExams();
+    }
+
+    private void LoadExams()
+    {
+        exams = ExamsDb.Exams.OrderBy(e => e.ExamDate).ToList();
+    }
+
+    private string GetPeriodName(int periodId)
+    {
+        var period = periods.FirstOrDefault(p => p.Id == periodId);
+        return period?.Name ?? "Nepoznat";
+    }
+
+    private string GetCourseName(int courseId)
+    {
+        var course = courses.FirstOrDefault(c => c.Id == courseId);
+        return course is not null ? $"{course.Name} ({course.Code})" : "Nepoznat";
+    }
+
+    private async Task HandleAdd()
+    {
+        if (model.ExamPeriodId == 0 || model.CourseId == 0)
+        {
+            message = "Izaberi rok i predmet.";
+            return;
+        }
+
+        var period = periods.First(p => p.Id == model.ExamPeriodId);
+
+        if (model.ExamDate < period.StartDate || model.ExamDate > period.EndDate)
+        {
+            message = $"Datum mora biti unutar perioda roka ({period.StartDate:dd.MM.yyyy} - {period.EndDate:dd.MM.yyyy}).";
+            return;
+        }
+
+        var alreadyExists = ExamsDb.Exams.Any(e =>
+            e.ExamPeriodId == model.ExamPeriodId && e.CourseId == model.CourseId);
+
+        if (alreadyExists)
+        {
+            message = "Ispit za taj predmet u tom roku već postoji.";
+            return;
+        }
+
+        ExamsDb.Exams.Add(new Exam
+        {
+            ExamPeriodId = model.ExamPeriodId,
+            CourseId = model.CourseId,
+            ExamDate = model.ExamDate
+        });
+
+        await ExamsDb.SaveChangesAsync();
+
+        message = "Ispit zakazan.";
+        model = new();
+        LoadExams();
+    }
+
+    private async Task DeleteExam(Exam exam)
+    {
+        var hasRegistrations = ExamsDb.ExamRegistrations.Any(r => r.ExamId == exam.Id);
+
+        if (hasRegistrations)
+        {
+            message = "Ne može se obrisati ispit koji ima prijavljene studente.";
+            return;
+        }
+
+        var confirmed = await JS.InvokeAsync<bool>("confirm", "Obrisati ovaj ispit?");
+        if (!confirmed) return;
+
+        ExamsDb.Exams.Remove(exam);
+        await ExamsDb.SaveChangesAsync();
+
+        message = "Ispit obrisan.";
+        LoadExams();
+    }
+
+    public class ExamModel
+    {
+        public int ExamPeriodId { get; set; }
+        public int CourseId { get; set; }
+        [Required] public DateTime ExamDate { get; set; } = DateTime.Today;
+    }
+}

@@ -1,0 +1,130 @@
+﻿@page "/exams/periods"
+@attribute [Authorize(Roles = "Administrator,StudentskaSluzba")]
+@rendermode InteractiveServer
+@using Eportal.Modules.Exams.Domain
+@using Eportal.Modules.Exams.Infrastructure
+@using Microsoft.AspNetCore.Authorization
+@using System.ComponentModel.DataAnnotations
+@inject ExamsDbContext ExamsDb
+@inject IJSRuntime JS
+
+<PageTitle>Ispitni rokovi</PageTitle>
+
+<h3>Ispitni rokovi</h3>
+
+<EditForm Model="@model" OnValidSubmit="HandleAdd" FormName="add-period-form">
+    <DataAnnotationsValidator />
+    <ValidationSummary />
+
+    <div class="mb-3">
+        <label>Naziv roka</label>
+        <InputText class="form-control" @bind-Value="model.Name" />
+    </div>
+
+    <div class="mb-3">
+        <label>Početak</label>
+        <InputDate class="form-control" @bind-Value="model.StartDate" />
+    </div>
+
+    <div class="mb-3">
+        <label>Kraj</label>
+        <InputDate class="form-control" @bind-Value="model.EndDate" />
+    </div>
+
+    <button type="submit" class="btn btn-primary">Dodaj rok</button>
+</EditForm>
+
+@if (!string.IsNullOrEmpty(message))
+{
+    <p class="mt-2">@message</p>
+}
+
+<hr class="my-4" />
+
+<h4>Postojeći rokovi</h4>
+<table class="table">
+    <thead>
+        <tr>
+            <th>Naziv</th>
+            <th>Period</th>
+            <th>Akcije</th>
+        </tr>
+    </thead>
+    <tbody>
+        @foreach (var p in periods)
+        {
+            <tr>
+                <td>@p.Name</td>
+                <td>@p.StartDate.ToString("dd.MM.yyyy") - @p.EndDate.ToString("dd.MM.yyyy")</td>
+                <td>
+                    <button class="btn btn-sm btn-outline-danger" @onclick="() => DeletePeriod(p)">Obriši</button>
+                </td>
+            </tr>
+        }
+    </tbody>
+</table>
+
+@code {
+    private List<ExamPeriod> periods = new();
+    private PeriodModel model = new();
+    private string? message;
+
+    protected override void OnInitialized()
+    {
+        LoadPeriods();
+    }
+
+    private void LoadPeriods()
+    {
+        periods = ExamsDb.ExamPeriods.OrderBy(p => p.StartDate).ToList();
+    }
+
+    private async Task HandleAdd()
+    {
+        if (model.EndDate < model.StartDate)
+        {
+            message = "Datum kraja ne može biti pre datuma početka.";
+            return;
+        }
+
+        ExamsDb.ExamPeriods.Add(new ExamPeriod
+        {
+            Name = model.Name,
+            StartDate = model.StartDate,
+            EndDate = model.EndDate
+        });
+
+        await ExamsDb.SaveChangesAsync();
+
+        message = "Ispitni rok dodat.";
+        model = new();
+        LoadPeriods();
+    }
+
+    private async Task DeletePeriod(ExamPeriod period)
+    {
+        var hasExams = ExamsDb.Exams.Any(e => e.ExamPeriodId == period.Id);
+
+        if (hasExams)
+        {
+            message = "Ne može se obrisati rok koji ima zakazane ispite.";
+            return;
+        }
+
+        var confirmed = await JS.InvokeAsync<bool>("confirm", $"Obrisati rok \"{period.Name}\"?");
+        if (!confirmed) return;
+
+        ExamsDb.ExamPeriods.Remove(period);
+        await ExamsDb.SaveChangesAsync();
+
+        message = "Rok obrisan.";
+        LoadPeriods();
+    }
+
+    public class PeriodModel
+    {
+        [Required] public string Name { get; set; } = "";
+        [Required] public DateTime StartDate { get; set; } = DateTime.Today;
+        [Required] public DateTime EndDate { get; set; } = DateTime.Today;
+    }
+}

@@ -14,15 +14,38 @@
 
     @* --- SEKCIJA: NASTAVA I PREDMETI --- *@
     @* Zamenjeno text-muted sa text-light-50 ili text-white-50 za svetlo sivu boju na tamnoj pozadini *@
-    <div class="px-3 mb-1 text-uppercase text-white-50 fw-bold small">Nastava</div>
+    
 
     @* Vidljivo svima koji su ulogovani *@
     <AuthorizeView>
         <Authorized>
+            <div class="px-3 mb-1 text-uppercase text-white-50 fw-bold small">Nastava</div>
             <div class="nav-item px-3">
                 <NavLink class="nav-link d-flex align-items-center gap-2 text-light" href="courses">
                     <i class="bi bi-journal-text fs-5 lh-1 text-secondary"></i>
                     <span>Pregled predmeta</span>
+                </NavLink>
+            </div>
+        </Authorized>
+    </AuthorizeView>
+
+    <AuthorizeView Roles="Student">
+        <Authorized>
+            <div class="nav-item px-3">
+                <NavLink class="nav-link d-flex align-items-center gap-2 text-light" href="exams/register">
+                    <i class="bi bi-pencil-square fs-5 lh-1 text-secondary"></i>
+                    <span>Prijava ispita</span>
+                </NavLink>
+            </div>
+        </Authorized>
+    </AuthorizeView>
+
+    <AuthorizeView Roles="Profesor">
+        <Authorized>
+            <div class="nav-item px-3">
+                <NavLink class="nav-link d-flex align-items-center gap-2 text-light" href="exams/grade">
+                    <i class="bi bi-check2-square fs-5 lh-1 text-secondary"></i>
+                    <span>Unos ocena</span>
                 </NavLink>
             </div>
         </Authorized>
@@ -63,6 +86,20 @@
         <Authorized>
             <hr class="border-secondary opacity-25 mx-3 my-2" />
             <div class="px-3 mb-1 text-uppercase text-white-50 fw-bold small">Administracija</div>
+
+            <div class="nav-item px-3">
+                <NavLink class="nav-link d-flex align-items-center gap-2 text-light" href="exams/periods">
+                    <i class="bi bi-calendar-event-fill fs-5 lh-1 text-secondary"></i>
+                    <span>Ispitni rokovi</span>
+                </NavLink>
+            </div>
+
+            <div class="nav-item px-3">
+                <NavLink class="nav-link d-flex align-items-center gap-2 text-light" href="exams/schedule">
+                    <i class="bi bi-calendar-check-fill fs-5 lh-1 text-secondary"></i>
+                    <span>Zakazivanje ispita</span>
+                </NavLink>
+            </div>
 
             <div class="nav-item px-3">
                 <NavLink class="nav-link d-flex align-items-center gap-2 text-light" href="register">

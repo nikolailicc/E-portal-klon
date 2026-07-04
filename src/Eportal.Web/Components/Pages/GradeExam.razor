@@ -1,0 +1,176 @@
+﻿@page "/exams/grade"
+@attribute [Authorize(Roles = "Profesor")]
+@rendermode InteractiveServer
+@using Eportal.Modules.Academic.Domain
+@using Eportal.Modules.Academic.Infrastructure
+@using Eportal.Modules.Exams.Domain
+@using Eportal.Modules.Exams.Infrastructure
+@using Eportal.Modules.Identity.Domain
+@using Eportal.Shared
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Identity
+@using Microsoft.EntityFrameworkCore
+@inject AcademicDbContext AcademicDb
+@inject ExamsDbContext ExamsDb
+@inject AuthenticationStateProvider AuthProvider
+@inject UserManager<AppUser> UserManager
+@inject IUserLookupService UserLookup
+
+<PageTitle>Unos ocena</PageTitle>
+
+<h3>Unos ocena</h3>
+
+@if (myCourses.Count == 0)
+{
+    <p>Nemaš dodeljenih predmeta.</p>
+}
+else
+{
+    <div class="mb-3">
+        <label>Predmet</label>
+        <select class="form-control" @bind="selectedCourseId" @bind:after="LoadRegistrations">
+            <option value="0">-- izaberi predmet --</option>
+            @foreach (var c in myCourses)
+            {
+                <option value="@c.Id">@c.Name (@c.Code)</option>
+            }
+        </select>
+    </div>
+
+    @if (selectedCourseId != 0)
+    {
+        @if (registrations.Count == 0)
+        {
+            <p>Nema prijavljenih studenata za ispite iz ovog predmeta.</p>
+        }
+        else
+        {
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Student</th>
+                        <th>Broj indeksa</th>
+                        <th>Datum ispita</th>
+                        <th>Ocena</th>
+                        <th>Akcije</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var r in registrations)
+                    {
+                        <tr>
+                            <td>@GetStudentName(r.StudentId)</td>
+                            <td>@GetStudentIndex(r.StudentId)</td>
+                            <td>@r.Exam.ExamDate.ToString("dd.MM.yyyy")</td>
+                            <td style="width: 100px">
+                                <input type="number" class="form-control" min="5" max="10"
+                                       value="@r.Grade" @onchange="e => gradeInputs[r.Id] = e.Value?.ToString() ?? string.Empty" />
+                            </td>
+                            <td>
+                                <button class="btn btn-sm btn-primary" @onclick="() => SaveGrade(r)">Sačuvaj</button>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+    }
+}
+
+@if (!string.IsNullOrEmpty(message))
+{
+    <p class="mt-2">@message</p>
+}
+
+@code {
+    private List<Course> myCourses = new();
+    private List<ExamRegistration> registrations = new();
+    private Dictionary<string, UserSummaryDto> studentUserCache = new();
+    private Dictionary<int, Student> studentCache = new();
+    private Dictionary<int, string> gradeInputs = new();
+    private int selectedCourseId;
+    private string? currentUserId;
+    private string? message;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthProvider.GetAuthenticationStateAsync();
+        var currentUser = await UserManager.GetUserAsync(authState.User);
+
+        if (currentUser is null) return;
+
+        currentUserId = currentUser.Id;
+        myCourses = AcademicDb.Courses.Where(c => c.ProfessorUserId == currentUserId).ToList();
+    }
+
+    private async Task LoadRegistrations()
+    {
+        registrations.Clear();
+        gradeInputs.Clear();
+
+        if (selectedCourseId == 0) return;
+
+        var examIds = ExamsDb.Exams
+            .Where(e => e.CourseId == selectedCourseId)
+            .Select(e => e.Id)
+            .ToList();
+
+        registrations = ExamsDb.ExamRegistrations
+            .Include(r => r.Exam)
+            .Where(r => examIds.Contains(r.ExamId))
+            .ToList();
+
+        var studentIds = registrations.Select(r => r.StudentId).Distinct().ToList();
+        var students = AcademicDb.Students.Where(s => studentIds.Contains(s.Id)).ToList();
+
+        foreach (var s in students)
+        {
+            studentCache[s.Id] = s;
+
+            var user = await UserLookup.FindByUserIdAsync(s.UserId);
+            if (user is not null)
+            {
+                studentUserCache[s.UserId] = user;
+            }
+        }
+    }
+
+    private string GetStudentName(int studentId)
+    {
+        if (!studentCache.TryGetValue(studentId, out var student)) return "Nepoznat";
+        return studentUserCache.TryGetValue(student.UserId, out var user)
+            ? $"{user.FirstName} {user.LastName}"
+            : "Nepoznat";
+    }
+
+    private string GetStudentIndex(int studentId)
+    {
+        return studentCache.TryGetValue(studentId, out var student) ? student.IndexNumber : "?";
+    }
+
+    private async Task SaveGrade(ExamRegistration registration)
+    {
+        if (!gradeInputs.TryGetValue(registration.Id, out var input) || !int.TryParse(input, out var grade))
+        {
+            message = "Unesi validnu ocenu.";
+            return;
+        }
+
+        if (grade < 5 || grade > 10)
+        {
+            message = "Ocena mora biti između 5 i 10.";
+            return;
+        }
+
+        var dbRegistration = await ExamsDb.ExamRegistrations.FindAsync(registration.Id);
+        if (dbRegistration is null) return;
+
+        dbRegistration.Grade = grade;
+        dbRegistration.GradedAt = DateTime.UtcNow;
+
+        await ExamsDb.SaveChangesAsync();
+
+        message = $"Ocena {grade} sačuvana za {GetStudentName(registration.StudentId)}.";
+        await LoadRegistrations();
+    }
+}
