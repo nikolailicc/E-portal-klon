@@ -1,0 +1,202 @@
+﻿@page "/exams/register"
+@attribute [Authorize(Roles = "Student")]
+@rendermode InteractiveServer
+@using Eportal.Modules.Academic.Domain
+@using Eportal.Modules.Academic.Infrastructure
+@using Eportal.Modules.Exams.Domain
+@using Eportal.Modules.Exams.Infrastructure
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Identity
+@using Microsoft.EntityFrameworkCore
+@inject AcademicDbContext AcademicDb
+@inject ExamsDbContext ExamsDb
+@inject AuthenticationStateProvider AuthProvider
+@inject UserManager<Eportal.Modules.Identity.Domain.AppUser> UserManager
+@inject IJSRuntime JS
+
+<PageTitle>Prijava ispita</PageTitle>
+
+<h3>Prijava ispita</h3>
+
+@if (student is null)
+{
+    <p>Nemaš akademski profil (obrati se studentskoj službi).</p>
+}
+else if (student.Status != StudentStatus.Aktivan)
+{
+    <p>Tvoj status studenta nije aktivan — prijava ispita nije moguća.</p>
+}
+else if (availableExams.Count == 0)
+{
+    <p>Nema dostupnih ispita za prijavu (ili si već prijavljen na sve zakazane ispite iz svojih predmeta).</p>
+}
+else
+{
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Predmet</th>
+                <th>Rok</th>
+                <th>Datum</th>
+                <th>Akcije</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var e in availableExams)
+            {
+                <tr>
+                    <td>@GetCourseName(e.CourseId)</td>
+                    <td>@GetPeriodName(e.ExamPeriodId)</td>
+                    <td>@e.ExamDate.ToString("dd.MM.yyyy")</td>
+                    <td>
+                        <button class="btn btn-sm btn-primary" @onclick="() => RegisterForExam(e)">Prijavi se</button>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@if (!string.IsNullOrEmpty(message))
+{
+    <p class="mt-2">@message</p>
+}
+
+<hr class="my-4" />
+
+<h4>Moje prijave</h4>
+@if (myRegistrations.Count == 0)
+{
+    <p>Nemaš prijavljenih ispita.</p>
+}
+else
+{
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Predmet</th>
+                <th>Datum ispita</th>
+                <th>Ocena</th>
+                <th>Akcije</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var r in myRegistrations)
+            {
+                <tr>
+                    <td>@GetCourseName(r.Exam.CourseId)</td>
+                    <td>@r.Exam.ExamDate.ToString("dd.MM.yyyy")</td>
+                    <td>@(r.Grade?.ToString() ?? "Nije ocenjeno")</td>
+                    <td>
+                        @if (r.Grade is null)
+                        {
+                            <button class="btn btn-sm btn-outline-danger" @onclick="() => Withdraw(r)">Odjavi se</button>
+                        }
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    private Student? student;
+    private List<Course> courses = new();
+    private List<ExamPeriod> periods = new();
+    private List<Exam> availableExams = new();
+    private List<ExamRegistration> myRegistrations = new();
+    private string? message;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthProvider.GetAuthenticationStateAsync();
+        var currentUser = await UserManager.GetUserAsync(authState.User);
+
+        if (currentUser is null) return;
+
+        student = await AcademicDb.Students.FirstOrDefaultAsync(s => s.UserId == currentUser.Id);
+
+        if (student is null) return;
+
+        courses = AcademicDb.Courses.ToList();
+        periods = ExamsDb.ExamPeriods.ToList();
+
+        LoadData();
+    }
+
+    private void LoadData()
+    {
+        if (student is null) return;
+
+        var myCourseIds = AcademicDb.Enrollments
+            .Where(e => e.StudentId == student.Id)
+            .Select(e => e.CourseId)
+            .ToList();
+
+        var registeredExamIds = ExamsDb.ExamRegistrations
+            .Where(r => r.StudentId == student.Id)
+            .Select(r => r.ExamId)
+            .ToList();
+
+        availableExams = ExamsDb.Exams
+            .Where(e => myCourseIds.Contains(e.CourseId) && !registeredExamIds.Contains(e.Id))
+            .OrderBy(e => e.ExamDate)
+            .ToList();
+
+        myRegistrations = ExamsDb.ExamRegistrations
+            .Include(r => r.Exam)
+            .Where(r => r.StudentId == student.Id)
+            .OrderBy(r => r.Exam.ExamDate)
+            .ToList();
+    }
+
+    private string GetCourseName(int courseId)
+    {
+        var course = courses.FirstOrDefault(c => c.Id == courseId);
+        return course is not null ? $"{course.Name} ({course.Code})" : "Nepoznat";
+    }
+
+    private string GetPeriodName(int periodId)
+    {
+        var period = periods.FirstOrDefault(p => p.Id == periodId);
+        return period?.Name ?? "Nepoznat";
+    }
+
+    private async Task RegisterForExam(Exam exam)
+    {
+        if (student is null) return;
+
+        var alreadyRegistered = ExamsDb.ExamRegistrations.Any(r =>
+            r.ExamId == exam.Id && r.StudentId == student.Id);
+
+        if (alreadyRegistered)
+        {
+            message = "Već si prijavljen na taj ispit.";
+            return;
+        }
+
+        ExamsDb.ExamRegistrations.Add(new ExamRegistration
+        {
+            ExamId = exam.Id,
+            StudentId = student.Id,
+            RegisteredAt = DateTime.UtcNow
+        });
+
+        await ExamsDb.SaveChangesAsync();
+
+        message = "Uspešno prijavljen ispit.";
+        LoadData();
+    }
+
+    private async Task Withdraw(ExamRegistration registration)
+    {
+        var confirmed = await JS.InvokeAsync<bool>("confirm", "Odjaviti se sa ovog ispita?");
+        if (!confirmed) return;
+
+        ExamsDb.ExamRegistrations.Remove(registration);
+        await ExamsDb.SaveChangesAsync();
+
+        message = "Odjavljen sa ispita.";
+        LoadData();
+    }
+}

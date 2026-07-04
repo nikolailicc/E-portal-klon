@@ -1,0 +1,195 @@
+﻿@page "/requests/manage"
+@attribute [Authorize(Roles = "Administrator,StudentskaSluzba")]
+@rendermode InteractiveServer
+@using Eportal.Modules.Academic.Domain
+@using Eportal.Modules.Academic.Infrastructure
+@using Eportal.Modules.Requests.Domain
+@using Eportal.Modules.Requests.Infrastructure
+@using Eportal.Shared
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.EntityFrameworkCore
+@inject AcademicDbContext AcademicDb
+@inject RequestsDbContext RequestsDb
+@inject IUserLookupService UserLookup
+
+<PageTitle>Obrada zahteva</PageTitle>
+
+<h3>Obrada zahteva</h3>
+
+<div class="mb-3">
+    <label>Filtriraj po statusu</label>
+    <select class="form-control" style="width:auto" @bind="filterStatus" @bind:after="LoadRequests">
+        <option value="">Svi</option>
+        @foreach (var status in Enum.GetValues<RequestStatus>())
+        {
+            <option value="@status">@GetStatusLabel(status)</option>
+        }
+    </select>
+</div>
+
+@if (requests.Count == 0)
+{
+    <p>Nema zahteva za prikaz.</p>
+}
+else
+{
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Student</th>
+                <th>Tip</th>
+                <th>Napomena</th>
+                <th>Status</th>
+                <th>Podneto</th>
+                <th>Akcije</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var r in requests)
+            {
+                <tr>
+                    <td>@GetStudentName(r.StudentId)</td>
+                    <td>@GetTypeLabel(r.Type)</td>
+                    <td>@r.Note</td>
+                    <td>@GetStatusLabel(r.Status)</td>
+                    <td>@r.SubmittedAt.ToLocalTime().ToString("dd.MM.yyyy")</td>
+                    <td>
+                        @if (r.Status is RequestStatus.Submitted or RequestStatus.InReview)
+                        {
+                            @if (r.Status == RequestStatus.Submitted)
+                            {
+                                <button class="btn btn-sm btn-outline-secondary me-1" @onclick="() => SetInReview(r)">U obradu</button>
+                            }
+                            <button class="btn btn-sm btn-outline-success me-1" @onclick="() => Approve(r)">Odobri</button>
+                            <button class="btn btn-sm btn-outline-danger" @onclick="() => StartReject(r)">Odbij</button>
+                        }
+                    </td>
+                </tr>
+
+                @if (rejectingId == r.Id)
+                {
+                    <tr>
+                        <td colspan="6">
+                            <div class="input-group">
+                                <input class="form-control" placeholder="Razlog odbijanja" @bind="rejectionReason" />
+                                <button class="btn btn-danger" @onclick="() => ConfirmReject(r)">Potvrdi odbijanje</button>
+                                <button class="btn btn-secondary" @onclick="CancelReject">Otkaži</button>
+                            </div>
+                        </td>
+                    </tr>
+                }
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    private List<StudentRequest> requests = new();
+    private Dictionary<int, Student> studentCache = new();
+    private Dictionary<string, UserSummaryDto> userCache = new();
+    private string filterStatus = "";
+    private int? rejectingId;
+    private string rejectionReason = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadRequests();
+    }
+
+    private async Task LoadRequests()
+    {
+        var query = RequestsDb.StudentRequests.AsQueryable();
+
+        if (!string.IsNullOrEmpty(filterStatus) && Enum.TryParse<RequestStatus>(filterStatus, out var status))
+        {
+            query = query.Where(r => r.Status == status);
+        }
+
+        requests = query.OrderByDescending(r => r.SubmittedAt).ToList();
+
+        var studentIds = requests.Select(r => r.StudentId).Distinct().ToList();
+        var students = AcademicDb.Students.Where(s => studentIds.Contains(s.Id)).ToList();
+
+        foreach (var s in students)
+        {
+            studentCache[s.Id] = s;
+            var user = await UserLookup.FindByUserIdAsync(s.UserId);
+            if (user is not null)
+            {
+                userCache[s.UserId] = user;
+            }
+        }
+    }
+
+    private string GetStudentName(int studentId)
+    {
+        if (!studentCache.TryGetValue(studentId, out var student)) return "Nepoznat";
+        return userCache.TryGetValue(student.UserId, out var user)
+            ? $"{user.FirstName} {user.LastName} ({student.IndexNumber})"
+            : "Nepoznat";
+    }
+
+    private async Task SetInReview(StudentRequest request)
+    {
+        request.Status = RequestStatus.InReview;
+        await RequestsDb.SaveChangesAsync();
+        await LoadRequests();
+    }
+
+    private async Task Approve(StudentRequest request)
+    {
+        request.Status = RequestStatus.Approved;
+        request.ResolvedAt = DateTime.UtcNow;
+        await RequestsDb.SaveChangesAsync();
+        await LoadRequests();
+    }
+
+    private void StartReject(StudentRequest request)
+    {
+        rejectingId = request.Id;
+        rejectionReason = "";
+    }
+
+    private void CancelReject()
+    {
+        rejectingId = null;
+        rejectionReason = "";
+    }
+
+    private async Task ConfirmReject(StudentRequest request)
+    {
+        if (string.IsNullOrWhiteSpace(rejectionReason))
+        {
+            return;
+        }
+
+        request.Status = RequestStatus.Rejected;
+        request.RejectionReason = rejectionReason;
+        request.ResolvedAt = DateTime.UtcNow;
+
+        await RequestsDb.SaveChangesAsync();
+
+        rejectingId = null;
+        rejectionReason = "";
+        await LoadRequests();
+    }
+
+    private static string GetTypeLabel(RequestType type) => type switch
+    {
+        RequestType.PotvrdaOStudiranju => "Potvrda o studiranju",
+        RequestType.PotvrdaZaStipendiju => "Potvrda za stipendiju",
+        RequestType.PromenaLicnihPodataka => "Promena ličnih podataka",
+        RequestType.Molba => "Molba",
+        RequestType.Uverenje => "Uverenje",
+        _ => type.ToString()
+    };
+
+    private static string GetStatusLabel(RequestStatus status) => status switch
+    {
+        RequestStatus.Submitted => "Podneto",
+        RequestStatus.InReview => "U obradi",
+        RequestStatus.Approved => "Odobreno",
+        RequestStatus.Rejected => "Odbijeno",
+        _ => status.ToString()
+    };
+}

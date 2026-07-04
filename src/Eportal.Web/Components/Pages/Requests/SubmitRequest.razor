@@ -1,0 +1,163 @@
+﻿@page "/requests/submit"
+@attribute [Authorize(Roles = "Student")]
+@rendermode InteractiveServer
+@using Eportal.Modules.Academic.Domain
+@using Eportal.Modules.Academic.Infrastructure
+@using Eportal.Modules.Requests.Domain
+@using Eportal.Modules.Requests.Infrastructure
+@using Eportal.Modules.Identity.Domain
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Identity
+@using Microsoft.EntityFrameworkCore
+@using System.ComponentModel.DataAnnotations
+@inject AcademicDbContext AcademicDb
+@inject RequestsDbContext RequestsDb
+@inject AuthenticationStateProvider AuthProvider
+@inject UserManager<AppUser> UserManager
+
+<PageTitle>Podnošenje zahteva</PageTitle>
+
+<h3>Podnošenje zahteva</h3>
+
+@if (student is null)
+{
+    <p>Nemaš akademski profil.</p>
+}
+else
+{
+    <EditForm Model="@model" OnValidSubmit="HandleSubmit" FormName="submit-request-form">
+        <DataAnnotationsValidator />
+        <ValidationSummary />
+
+        <div class="mb-3">
+            <label>Tip zahteva</label>
+            <InputSelect class="form-control" @bind-Value="model.Type">
+                @foreach (var type in Enum.GetValues<RequestType>())
+                {
+                    <option value="@type">@GetTypeLabel(type)</option>
+                }
+            </InputSelect>
+        </div>
+
+        <div class="mb-3">
+            <label>Napomena (opciono)</label>
+            <InputTextArea class="form-control" @bind-Value="model.Note" rows="3" />
+        </div>
+
+        <button type="submit" class="btn btn-primary">Podnesi zahtev</button>
+    </EditForm>
+}
+
+@if (!string.IsNullOrEmpty(message))
+{
+    <p class="mt-2">@message</p>
+}
+
+<hr class="my-4" />
+
+<h4>Moji zahtevi</h4>
+@if (myRequests.Count == 0)
+{
+    <p>Nemaš podnetih zahteva.</p>
+}
+else
+{
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Tip</th>
+                <th>Status</th>
+                <th>Podneto</th>
+                <th>Napomena / Razlog</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var r in myRequests)
+            {
+                <tr>
+                    <td>@GetTypeLabel(r.Type)</td>
+                    <td>@GetStatusLabel(r.Status)</td>
+                    <td>@r.SubmittedAt.ToLocalTime().ToString("dd.MM.yyyy")</td>
+                    <td>@(r.Status == RequestStatus.Rejected ? r.RejectionReason : r.Note)</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    private Student? student;
+    private RequestModel model = new();
+    private List<StudentRequest> myRequests = new();
+    private string? message;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthProvider.GetAuthenticationStateAsync();
+        var currentUser = await UserManager.GetUserAsync(authState.User);
+
+        if (currentUser is null) return;
+
+        student = await AcademicDb.Students.FirstOrDefaultAsync(s => s.UserId == currentUser.Id);
+
+        if (student is not null)
+        {
+            LoadRequests();
+        }
+    }
+
+    private void LoadRequests()
+    {
+        if (student is null) return;
+
+        myRequests = RequestsDb.StudentRequests
+            .Where(r => r.StudentId == student.Id)
+            .OrderByDescending(r => r.SubmittedAt)
+            .ToList();
+    }
+
+    private async Task HandleSubmit()
+    {
+        if (student is null) return;
+
+        RequestsDb.StudentRequests.Add(new StudentRequest
+        {
+            StudentId = student.Id,
+            Type = model.Type,
+            Note = model.Note,
+            Status = RequestStatus.Submitted,
+            SubmittedAt = DateTime.UtcNow
+        });
+
+        await RequestsDb.SaveChangesAsync();
+
+        message = "Zahtev uspešno podnet.";
+        model = new();
+        LoadRequests();
+    }
+
+    private static string GetTypeLabel(RequestType type) => type switch
+    {
+        RequestType.PotvrdaOStudiranju => "Potvrda o studiranju",
+        RequestType.PotvrdaZaStipendiju => "Potvrda za stipendiju",
+        RequestType.PromenaLicnihPodataka => "Promena ličnih podataka",
+        RequestType.Molba => "Molba",
+        RequestType.Uverenje => "Uverenje",
+        _ => type.ToString()
+    };
+
+    private static string GetStatusLabel(RequestStatus status) => status switch
+    {
+        RequestStatus.Submitted => "Podneto",
+        RequestStatus.InReview => "U obradi",
+        RequestStatus.Approved => "Odobreno",
+        RequestStatus.Rejected => "Odbijeno",
+        _ => status.ToString()
+    };
+
+    public class RequestModel
+    {
+        [Required] public RequestType Type { get; set; } = RequestType.PotvrdaOStudiranju;
+        public string? Note { get; set; }
+    }
+}

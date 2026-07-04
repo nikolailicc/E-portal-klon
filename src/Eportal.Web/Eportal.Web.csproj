@@ -5,6 +5,7 @@
     <ProjectReference Include="..\Eportal.Modules.Identity\Eportal.Modules.Identity.csproj" />
     <ProjectReference Include="..\Eportal.Modules.Academic\Eportal.Modules.Academic.csproj" />
     <ProjectReference Include="..\Eportal.Modules.Exams\Eportal.Modules.Exams.csproj" />
+    <ProjectReference Include="..\Eportal.Modules.Requests\Eportal.Modules.Requests.csproj" />
   </ItemGroup>
 
   <ItemGroup>

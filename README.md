@@ -22,23 +22,25 @@ Eportal.sln
 │   │   └── Components/Pages/
 │   │       ├── Identity/               → Login, Register, Users, Profile, AccessDenied
 │   │       ├── Academic/               → AddCourse, CourseList, Enroll, StudyPrograms
-│   │       └── Exams/                  → ExamPeriods, Exams, GradeExam, RegisterExam
+│   │       ├── Exams/                  → ExamPeriods, Exams, GradeExam, RegisterExam
+│   │       └── Requests/               → SubmitRequest, ManageRequests
 │   ├── Eportal.Shared                 → zajednički DTO modeli i kontrakti (npr. UserSummaryDto, IUserLookupService)
 │   ├── Eportal.Modules.Identity       → autentifikacija, autorizacija, korisnici i uloge
 │   ├── Eportal.Modules.Academic       → studenti, predmeti, studijski programi, upisi
 │   ├── Eportal.Modules.Exams          → ispitni rokovi, ispiti, prijave, ocene
-│   └── Eportal.Modules.Requests       → digitalna studentska služba, dokumenta (u planu)
+│   └── Eportal.Modules.Requests       → digitalna studentska služba (zahtevi, statusi)
 ```
 
-Svaki modul je organizovan po slojevima: **Domain** (entiteti), **Application** (poslovna logika, po potrebi) i **Infrastructure** (baza, eksterni servisi). Kad jednom modulu treba podatak iz drugog (npr. Academic/Exams modulu ime profesora ili studenta iz Identity modula), koristi se labava veza preko `Eportal.Shared` (zajednički DTO + interfejs), a ne direktna referenca između modula — svaki modul ostaje nezavisno razvojna celina.
+Svaki modul je organizovan po slojevima: **Domain** (entiteti), **Application** (poslovna logika, po potrebi) i **Infrastructure** (baza, eksterni servisi). Kad jednom modulu treba podatak iz drugog (npr. Academic/Exams/Requests modulu ime profesora ili studenta iz Identity modula), koristi se labava veza preko `Eportal.Shared` (zajednički DTO + interfejs), a ne direktna referenca između modula — svaki modul ostaje nezavisno razvojna celina.
 
 ## Trenutni status
 
 - [x] Solution struktura i moduli povezani referencama
 - [x] **Identity modul — gotov**: registracija (zaključana za Administratora/Studentsku službu), login/logout, 4 uloge (Student, Profesor, StudentskaSluzba, Administrator), zaštita ruta po ulogama, upravljanje korisnicima (promena uloge, aktivacija/deaktivacija/brisanje naloga), lični profil sa promenom lozinke
 - [x] **Academic modul — gotov**: studijski programi (CRUD), predmeti (dodavanje/izmena/brisanje, vezani za više studijskih programa), upis studenata na predmete, lista predmeta filtrirana po ulozi
-- [x] **Exams modul — gotov**: ispitni rokovi (sesije sa periodom), zakazivanje konkretnih ispita po predmetu unutar roka, prijava/odjava ispita (student), unos ocena (profesor, ograničeno na sopstvene predmete), automatski prosek i ESPB na profilu studenta (računa se od položenih ispita, ocena 5 se ne računa u prosek, uzima se najbolja ocena po predmetu)
-- [ ] Requests & Documents modul — digitalna studentska služba, generisanje PDF potvrda
+- [x] **Exams modul — gotov**: ispitni rokovi (sesije sa periodom), zakazivanje konkretnih ispita po predmetu unutar roka, prijava/odjava ispita (student), unos ocena (profesor, ograničeno na sopstvene predmete), automatski prosek i ESPB na profilu studenta
+- [x] **Requests modul — u toku**: podnošenje zahteva (student, 5 tipova iz plana), obrada zahteva (Administrator/StudentskaSluzba, tok Submitted → InReview → Approved/Rejected sa razlogom odbijanja)
+- [ ] Generisanje PDF potvrda za odobrene zahteve (Document Service iz originalnog plana) — sledeći korak
 
 ## Pokretanje projekta lokalno
 
@@ -66,7 +68,7 @@ Svaki modul je organizovan po slojevima: **Domain** (entiteti), **Application** 
    }
    ```
 
-3. Primeni EF Core migracije — projekat ima **tri odvojena `DbContext`-a** nad istom bazom (`IdentityDbContext`, `AcademicDbContext`, `ExamsDbContext`), pa je potrebno primeniti migracije za svaki, uz eksplicitno naveden `--context`:
+3. Primeni EF Core migracije — projekat ima **četiri odvojena `DbContext`-a** nad istom bazom (`IdentityDbContext`, `AcademicDbContext`, `ExamsDbContext`, `RequestsDbContext`), pa je potrebno primeniti migracije za svaki, uz eksplicitno naveden `--context`:
 
    ```
    dotnet ef database update --context IdentityDbContext --project src/Eportal.Modules.Identity/Eportal.Modules.Identity.csproj --startup-project src/Eportal.Web/Eportal.Web.csproj
@@ -74,6 +76,8 @@ Svaki modul je organizovan po slojevima: **Domain** (entiteti), **Application** 
    dotnet ef database update --context AcademicDbContext --project src/Eportal.Modules.Academic/Eportal.Modules.Academic.csproj --startup-project src/Eportal.Web/Eportal.Web.csproj
 
    dotnet ef database update --context ExamsDbContext --project src/Eportal.Modules.Exams/Eportal.Modules.Exams.csproj --startup-project src/Eportal.Web/Eportal.Web.csproj
+
+   dotnet ef database update --context RequestsDbContext --project src/Eportal.Modules.Requests/Eportal.Modules.Requests.csproj --startup-project src/Eportal.Web/Eportal.Web.csproj
    ```
 
 4. Pokreni aplikaciju:
@@ -88,9 +92,9 @@ Pri prvom pokretanju aplikacija automatski seed-uje 4 osnovne uloge i administra
 
 ## Struktura po ulogama
 
-| Uloga             | Mogućnosti                                                                                                           |
-| ----------------- | -------------------------------------------------------------------------------------------------------------------- |
-| Student           | Lični i akademski profil (prosek, ESPB, upisani/položeni predmeti), prijava/odjava ispita                            |
-| Profesor          | Pregled i izmena svojih predmeta, unos ocena za svoje predmete                                                       |
-| Studentska služba | Dodavanje naloga (Student/Profesor), predmeti, upis studenata na predmete, studijski programi, ispitni rokovi/ispiti |
-| Administrator     | Sve navedeno + upravljanje korisnicima (uloge, aktivacija/deaktivacija/brisanje naloga)                              |
+| Uloga              | Mogućnosti                                                                                                                     |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------- |
+| Student            | Lični i akademski profil (prosek, ESPB, upisani/položeni predmeti), prijava/odjava ispita, podnošenje i praćenje zahteva          |
+| Profesor           | Pregled i izmena svojih predmeta, unos ocena za svoje predmete                                                                    |
+| Studentska služba  | Dodavanje naloga (Student/Profesor), predmeti, upis studenata, studijski programi, ispitni rokovi/ispiti, obrada zahteva          |
+| Administrator      | Sve navedeno + upravljanje korisnicima (uloge, aktivacija/deaktivacija/brisanje naloga)                                          |
