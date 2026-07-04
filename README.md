@@ -2,90 +2,194 @@
 
 Digitalni portal za upravljanje fakultetom — samostalni projekat za završni rad.
 
-Eportal digitalizuje ključne administrativne i akademske procese na fakultetu: evidenciju studenata i predmeta, prijavu i praćenje ispita, elektronsku studentsku službu i sistem obaveštenja, kroz jedinstven portal sa ulogama za studenta, profesora, studentsku službu i administratora.
+Eportal digitalizuje ključne administrativne i akademske procese na fakultetu: evidenciju studenata i predmeta, prijavu i praćenje ispita, elektronsku studentsku službu i sistem obaveštenja kroz jedinstven portal sa ulogama za studenta, profesora, studentsku službu i administratora.
 
-## Tehnologije
+---
 
-- **Backend:** ASP.NET Core 10, C# (bez zasebnog Web API sloja — logika živi unutar Blazor Server aplikacije i modula)
+# Tehnologije
+
+- **Backend:** ASP.NET Core 10
 - **Frontend:** Blazor Server
-- **Baza podataka:** MySQL + Entity Framework Core 9 (Pomelo provajder)
-- **Autentifikacija:** ASP.NET Core Identity (cookie-based) + role-based autorizacija
+- **Jezik:** C#
+- **Baza podataka:** MySQL
+- **ORM:** Entity Framework Core 9.0.11 + Pomelo
+- **Autentifikacija:** ASP.NET Core Identity (cookie-based)
+- **Arhitektura:** Modularni monolit
 
-## Arhitektura
+---
 
-Projekat je organizovan kao **modularni monolit** — jedna aplikacija sa jasno odvojenim modulima, umesto pune mikroservisne arhitekture, radi jednostavnijeg razvoja i održavanja u okviru samostalnog rada.
+# Arhitektura
 
 ```
 Eportal.sln
-├── src/
-│   ├── Eportal.Web                    → Blazor Server frontend
-│   ├── Eportal.Shared                 → zajednički DTO modeli i kontrakti (npr. UserSummaryDto, IUserLookupService)
-│   ├── Eportal.Modules.Identity       → autentifikacija, autorizacija, korisnici i uloge
-│   ├── Eportal.Modules.Academic       → studenti, predmeti, studijski programi, upisi
-│   ├── Eportal.Modules.Exams          → ispitni rokovi, prijava, ocene         (u planu)
-│   └── Eportal.Modules.Requests       → digitalna studentska služba, dokumenta (u planu)
+└── src/
+    ├── Eportal.Web
+    ├── Eportal.Shared
+    ├── Eportal.Modules.Identity
+    ├── Eportal.Modules.Academic
+    ├── Eportal.Modules.Exams
+    └── Eportal.Modules.Requests (planirano)
 ```
 
-Svaki modul je organizovan po slojevima: **Domain** (entiteti), **Application** (poslovna logika, po potrebi) i **Infrastructure** (baza, eksterni servisi). Kad jednom modulu treba podatak iz drugog (npr. Academic modulu ime profesora iz Identity modula), koristi se labava veza preko `Eportal.Shared` (zajednički DTO + interfejs), a ne direktna referenca između modula — svaki modul ostaje nezavisno razvojna celina.
+Svaki modul je organizovan po slojevima:
 
-## Trenutni status
+- Domain
+- Application (po potrebi)
+- Infrastructure
 
-- [x] Solution struktura i moduli povezani referencama
-- [x] **Identity modul — gotov**: registracija (zaključana za Administratora/Studentsku službu), login/logout, 4 uloge (Student, Profesor, StudentskaSluzba, Administrator), zaštita ruta po ulogama, upravljanje korisnicima (promena uloge, aktivacija/deaktivacija/brisanje naloga), lični profil sa promenom lozinke
-- [x] **Academic modul — gotov**: studijski programi (CRUD), predmeti (dodavanje/izmena/brisanje, vezani za više studijskih programa), upis studenata na predmete, lista predmeta filtrirana po ulozi (student vidi svoje upisane, profesor svoje predmete, admin/služba sve), akademski deo profila studenta (broj indeksa, program, status, upisani predmeti)
-- [ ] Exams modul — ispitni rokovi, prijava/odjava ispita, unos ocena
-- [ ] Requests & Documents modul — digitalna studentska služba, generisanje PDF potvrda
-- [ ] Prosek studenta na profilu (čeka Exams modul, zavisi od unetih ocena)
+Moduli međusobno ne zavise direktno. Za razmenu podataka koriste se zajednički DTO modeli i interfejsi iz `Eportal.Shared`.
 
-## Pokretanje projekta lokalno
+---
 
-### Preduslovi
+# Implementirani moduli
 
-- [.NET SDK](https://dotnet.microsoft.com/download) (10.x)
-- MySQL server (lokalno ili u kontejneru)
+## Identity
 
-### Podešavanje
+- Registracija korisnika (Administrator / Studentska služba)
+- Login / Logout
+- Cookie autentifikacija
+- Upravljanje korisnicima
+- Promena uloge
+- Aktivacija / deaktivacija naloga
+- Brisanje naloga
+- Profil korisnika
+- Promena lozinke
 
-1. Kloniraj repozitorijum:
+---
 
-   ```
-   git clone https://github.com/nikolailicc/E-portal-klon
-   cd Eportal
-   ```
+## Academic
 
-2. Kreiraj `src/Eportal.Web/appsettings.Development.json` (nije uključen u repozitorijum) sa svojim connection stringom:
+- CRUD studijskih programa
+- CRUD predmeta
+- Veza predmet ↔ studijski program (many-to-many)
+- Dodela profesora predmetu
+- Upis studenata na predmete
+- Prikaz predmeta po ulozi
+- Akademski podaci studenta
 
-   ```json
-   {
-     "ConnectionStrings": {
-       "DefaultConnection": "Server=localhost;Port=PORT_MYSQL;Database=IME_BAZE;User=IME_USERA;Password=TVOJA_LOZINKA;"
-     }
-   }
-   ```
+---
 
-3. Primeni EF Core migracije — projekat ima **dva odvojena `DbContext`-a** nad istom bazom (`IdentityDbContext` i `AcademicDbContext`), pa je potrebno primeniti migracije za oba, uz eksplicitno naveden `--context`:
+## Exams
 
-   ```
-   dotnet ef database update --context IdentityDbContext --project src/Eportal.Modules.Identity/Eportal.Modules.Identity.csproj --startup-project src/Eportal.Web/Eportal.Web.csproj
+Implementirano:
 
-   dotnet ef database update --context AcademicDbContext --project src/Eportal.Modules.Academic/Eportal.Modules.Academic.csproj --startup-project src/Eportal.Web/Eportal.Web.csproj
-   ```
+- CRUD ispitnih rokova
+- Zakazivanje ispita unutar ispitnog roka
+- Validacija datuma ispita
+- Sprečavanje duplog zakazivanja
+- Prijava ispita
+- Odjava ispita
+- Profesor ocenjuje samo svoje studente
+- Unos ocena (5–10)
 
-4. Pokreni aplikaciju:
-   ```
-   dotnet run --project src/Eportal.Web/Eportal.Web.csproj
-   ```
+Preostalo:
 
-Pri prvom pokretanju aplikacija automatski seed-uje 4 osnovne uloge i administratorski nalog:
+- računanje proseka
+- automatsko ažuriranje ESPB bodova na profilu studenta
 
-- **Email:** `admin@eportal.local`
-- **Lozinka:** `Admin123!`
+---
 
-## Struktura po ulogama
+## Requests & Documents
 
-| Uloga             | Mogućnosti                                                                                    |
-| ----------------- | --------------------------------------------------------------------------------------------- |
-| Student           | Lični i akademski profil, pregled upisanih predmeta                                           |
-| Profesor          | Pregled i izmena svojih predmeta                                                              |
-| Studentska služba | Dodavanje naloga (Student/Profesor), predmeti, upis studenata na predmete, studijski programi |
-| Administrator     | Sve navedeno + upravljanje korisnicima (uloge, aktivacija/deaktivacija/brisanje naloga)       |
+Planirano:
+
+- elektronski zahtevi
+- PDF potvrde
+- digitalna studentska služba
+
+---
+
+# Trenutni status
+
+- ✅ Identity modul
+- ✅ Academic modul
+- 🟡 Exams modul (99% završen)
+- ⏳ Requests & Documents modul
+
+---
+
+# Pokretanje projekta
+
+## Preduslovi
+
+- .NET SDK 10
+- MySQL
+
+## appsettings.Development.json
+
+```json
+{
+  "ConnectionStrings": {
+    "DefaultConnection": "Server=localhost;Port=3306;Database=EportalDb;User=...;Password=...;"
+  }
+}
+```
+
+---
+
+## Migracije
+
+Identity
+
+```bash
+dotnet ef database update \
+--context IdentityDbContext \
+--project src/Eportal.Modules.Identity \
+--startup-project src/Eportal.Web
+```
+
+Academic
+
+```bash
+dotnet ef database update \
+--context AcademicDbContext \
+--project src/Eportal.Modules.Academic \
+--startup-project src/Eportal.Web
+```
+
+Exams
+
+```bash
+dotnet ef database update \
+--context ExamsDbContext \
+--project src/Eportal.Modules.Exams \
+--startup-project src/Eportal.Web
+```
+
+---
+
+## Pokretanje
+
+```bash
+dotnet run --project src/Eportal.Web
+```
+
+Prilikom prvog pokretanja automatski se kreiraju:
+
+- četiri osnovne uloge
+- administratorski nalog
+
+```
+Email: admin@eportal.local
+Password: Admin123!
+```
+
+---
+
+# Uloge
+
+| Uloga | Funkcionalnosti |
+|-------|-----------------|
+| Student | Profil, akademski podaci, prijava i odjava ispita, pregled prijavljenih ispita |
+| Profesor | Pregled svojih predmeta, unos ocena |
+| Studentska služba | Upravljanje studijskim programima, predmetima, upisima, ispitnim rokovima i ispitima |
+| Administrator | Sve funkcionalnosti + upravljanje korisnicima |
+
+---
+
+# Sledeći koraci
+
+- Izračunavanje prosečne ocene
+- Automatsko računanje ESPB bodova
+- Requests & Documents modul
+- PDF generisanje potvrda
