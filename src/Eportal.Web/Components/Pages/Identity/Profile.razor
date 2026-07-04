@@ -8,6 +8,8 @@
 @using Eportal.Modules.Academic.Domain
 @using Eportal.Modules.Academic.Infrastructure
 @using Microsoft.EntityFrameworkCore
+@using Eportal.Modules.Exams.Infrastructure
+@inject ExamsDbContext ExamsDb
 @inject UserManager<AppUser> UserManager
 @inject AuthenticationStateProvider AuthProvider
 @inject SignInManager<AppUser> SignInManager
@@ -114,38 +116,85 @@ else
                 <tr><th>Broj indeksa</th><td>@studentProfile.IndexNumber</td></tr>
                 <tr><th>Studijski program</th><td>@studentProfile.StudyProgram?.Name</td></tr>
                 <tr><th>Status</th><td>@studentProfile.Status</td></tr>
-                <tr><th>ESPB</th><td>@studentProfile.Espb</td></tr>
+                <tr><th>ESPB (položeno)</th><td>@totalEspb</td></tr>
+                <tr><th>Prosek</th><td>@(averageGrade is null ? "Nema položenih ispita" : averageGrade.Value.ToString("0.00"))</td></tr>
             </tbody>
         </table>
 
-        <h6>Upisani predmeti</h6>
-        @if (enrolledCourses.Count == 0)
+        <ul class="nav nav-pills mb-3 mt-4">
+            <li class="nav-item">
+                <button class="nav-link @(activeCourseTab == "upisani" ? "active" : "")" @onclick='() => activeCourseTab = "upisani"'>
+                    Upisani predmeti
+                </button>
+            </li>
+            <li class="nav-item">
+                <button class="nav-link @(activeCourseTab == "polozeni" ? "active" : "")" @onclick='() => activeCourseTab = "polozeni"'>
+                    Položeni predmeti
+                </button>
+            </li>
+        </ul>
+
+        @if (activeCourseTab == "upisani")
         {
-            <p>Nema upisanih predmeta.</p>
-        }
-        else
-        {
-            <table class="table">
-                <thead>
-                    <tr>
-                        <th>Naziv</th>
-                        <th>Šifra</th>
-                        <th>ESPB</th>
-                        <th>Semestar</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @foreach (var c in enrolledCourses)
-                    {
+            @if (enrolledCourses.Count == 0)
+            {
+                <p>Nema upisanih predmeta.</p>
+            }
+            else
+            {
+                <table class="table">
+                    <thead>
                         <tr>
-                            <td>@c.Name</td>
-                            <td>@c.Code</td>
-                            <td>@c.Espb</td>
-                            <td>@c.Semester</td>
+                            <th>Naziv</th>
+                            <th>Šifra</th>
+                            <th>ESPB</th>
+                            <th>Semestar</th>
                         </tr>
-                    }
-                </tbody>
-            </table>
+                    </thead>
+                    <tbody>
+                        @foreach (var c in enrolledCourses)
+                        {
+                            <tr>
+                                <td>@c.Name</td>
+                                <td>@c.Code</td>
+                                <td>@c.Espb</td>
+                                <td>@c.Semester</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            }
+        }
+        else if (activeCourseTab == "polozeni")
+        {
+            @if (passedCourses.Count == 0)
+            {
+                <p>Nema položenih predmeta.</p>
+            }
+            else
+            {
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Naziv</th>
+                            <th>Šifra</th>
+                            <th>ESPB</th>
+                            <th>Ocena</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var pc in passedCourses)
+                        {
+                            <tr>
+                                <td>@pc.Course.Name</td>
+                                <td>@pc.Course.Code</td>
+                                <td>@pc.Course.Espb</td>
+                                <td>@pc.Grade</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            }
         }
     }
 }
@@ -159,6 +208,10 @@ else
     private Student? studentProfile;
     private List<Course> enrolledCourses = new();
     private string activeTab = "podaci";
+    private int totalEspb;
+    private double? averageGrade;
+    private string activeCourseTab = "upisani";
+    private List<(Course Course, int Grade)> passedCourses = new();
 
     protected override async Task OnInitializedAsync()
     {
@@ -180,6 +233,41 @@ else
                     .Where(e => e.StudentId == studentProfile.Id)
                     .Select(e => e.Course)
                     .ToListAsync();
+
+                var passedRegistrations = await ExamsDb.ExamRegistrations
+                    .Include(r => r.Exam)
+                    .Where(r => r.StudentId == studentProfile.Id && r.Grade != null && r.Grade >= 6)
+                    .ToListAsync();
+
+                if (passedRegistrations.Count > 0)
+                {
+                    averageGrade = passedRegistrations.Average(r => r.Grade!.Value);
+
+                    var passedCourseIds = passedRegistrations.Select(r => r.Exam.CourseId).Distinct().ToList();
+
+                    var passedCoursesData = await AcademicDb.Courses
+                        .Where(c => passedCourseIds.Contains(c.Id))
+                        .ToListAsync();
+
+                    totalEspb = passedCoursesData.Sum(c => c.Espb);
+
+                    passedCourses = passedRegistrations
+                        .GroupBy(r => r.Exam.CourseId)
+                        .Select(g =>
+                        {
+                            var course = passedCoursesData.First(c => c.Id == g.Key);
+                            var bestGrade = g.Max(r => r.Grade!.Value);
+                            return (Course: course, Grade: bestGrade);
+                        })
+                        .ToList();
+                }
+                else
+                {
+                    averageGrade = null;
+                    totalEspb = 0;
+                    passedCourses = new();
+                }
+               
             }
         }
     }
