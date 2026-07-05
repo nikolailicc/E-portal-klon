@@ -1,5 +1,17 @@
 ﻿@page "/"
+@using Eportal.Modules.Academic.Infrastructure
+@using Eportal.Modules.Exams.Infrastructure
+@using Eportal.Modules.Requests.Infrastructure
+@using Eportal.Modules.Requests.Domain
+@using Eportal.Modules.Identity.Domain
 @using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.AspNetCore.Identity
+@using Microsoft.EntityFrameworkCore
+@inject AcademicDbContext AcademicDb
+@inject ExamsDbContext ExamsDb
+@inject RequestsDbContext RequestsDb
+@inject UserManager<AppUser> UserManager
+@inject AuthenticationStateProvider AuthProvider
 
 <PageTitle>Eportal - Home</PageTitle>
 
@@ -13,6 +25,202 @@
         </p>
     </div>
 
-    
+    @if (!isAuthenticated)
+    {
+        <div class="alert alert-info">
+            Prijavi se da bi pristupio svojim predmetima, ispitima i zahtevima. Naloge dodeljuje studentska služba ili administrator.
+        </div>
+    }
+    else if (isStudent)
+    {
+        <div class="row g-3 mb-4">
+            <div class="col-md-3">
+                <div class="card text-center p-3">
+                    <div class="fs-3 fw-bold">@enrolledCount</div>
+                    <div class="text-muted">Upisanih predmeta</div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card text-center p-3">
+                    <div class="fs-3 fw-bold">@espb</div>
+                    <div class="text-muted">Osvojeno ESPB</div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card text-center p-3">
+                    <div class="fs-3 fw-bold">@(average is null ? "-" : average.Value.ToString("0.00"))</div>
+                    <div class="text-muted">Prosek</div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card text-center p-3">
+                    <div class="fs-3 fw-bold">@pendingRequestsCount</div>
+                    <div class="text-muted">Zahtevi u obradi</div>
+                </div>
+            </div>
+        </div>
+
+        @if (nextExamDate is not null)
+        {
+            <div class="alert alert-primary">
+                Sledeći prijavljeni ispit: <strong>@nextExamCourseName</strong> — @nextExamDate.Value.ToString("dd.MM.yyyy")
+            </div>
+        }
+
+        
+    }
+    else if (isProfessor)
+    {
+        <div class="row g-3 mb-4">
+            <div class="col-md-4">
+                <div class="card text-center p-3">
+                    <div class="fs-3 fw-bold">@myCoursesCount</div>
+                    <div class="text-muted">Mojih predmeta</div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card text-center p-3">
+                    <div class="fs-3 fw-bold">@ungradedCount</div>
+                    <div class="text-muted">Neocenjenih prijava</div>
+                </div>
+            </div>
+        </div>
+
+        
+    }
+    else if (isAdminOrStaff)
+    {
+        <div class="row g-3 mb-4">
+            <div class="col-md-3">
+                <div class="card text-center p-3">
+                    <div class="fs-3 fw-bold">@studentsCount</div>
+                    <div class="text-muted">Studenata</div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card text-center p-3">
+                    <div class="fs-3 fw-bold">@coursesCount</div>
+                    <div class="text-muted">Predmeta</div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card text-center p-3">
+                    <div class="fs-3 fw-bold">@pendingRequestsCount</div>
+                    <div class="text-muted">Zahtevi na čekanju</div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card text-center p-3">
+                    <div class="fs-3 fw-bold">@upcomingExamsCount</div>
+                    <div class="text-muted">Predstojećih ispita</div>
+                </div>
+            </div>
+        </div>
+
+        
+    }
 
 </div>
+
+@code {
+    private bool isAuthenticated;
+    private bool isStudent;
+    private bool isProfessor;
+    private bool isAdminOrStaff;
+    private bool isAdmin;
+
+    private int enrolledCount;
+    private int espb;
+    private double? average;
+    private int pendingRequestsCount;
+    private DateTime? nextExamDate;
+    private string nextExamCourseName = "";
+
+    private int myCoursesCount;
+    private int ungradedCount;
+
+    private int studentsCount;
+    private int coursesCount;
+    private int upcomingExamsCount;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthProvider.GetAuthenticationStateAsync();
+        var principal = authState.User;
+
+        isAuthenticated = principal.Identity?.IsAuthenticated ?? false;
+        if (!isAuthenticated) return;
+
+        isStudent = principal.IsInRole("Student");
+        isProfessor = principal.IsInRole("Profesor");
+        isAdmin = principal.IsInRole("Administrator");
+        isAdminOrStaff = isAdmin || principal.IsInRole("StudentskaSluzba");
+
+        var currentUser = await UserManager.GetUserAsync(principal);
+        if (currentUser is null) return;
+
+        if (isStudent)
+        {
+            var student = await AcademicDb.Students.FirstOrDefaultAsync(s => s.UserId == currentUser.Id);
+            if (student is not null)
+            {
+                enrolledCount = await AcademicDb.Enrollments.CountAsync(e => e.StudentId == student.Id);
+
+                var passed = await ExamsDb.ExamRegistrations
+                    .Include(r => r.Exam)
+                    .Where(r => r.StudentId == student.Id && r.Grade != null && r.Grade >= 6)
+                    .ToListAsync();
+
+                if (passed.Count > 0)
+                {
+                    average = passed.Average(r => r.Grade!.Value);
+                    var courseIds = passed.Select(r => r.Exam.CourseId).Distinct().ToList();
+                    espb = await AcademicDb.Courses.Where(c => courseIds.Contains(c.Id)).SumAsync(c => c.Espb);
+                }
+
+                pendingRequestsCount = await RequestsDb.StudentRequests.CountAsync(r =>
+                    r.StudentId == student.Id && (r.Status == RequestStatus.Submitted || r.Status == RequestStatus.InReview));
+
+                var next = await ExamsDb.ExamRegistrations
+                    .Include(r => r.Exam)
+                    .Where(r => r.StudentId == student.Id && r.Grade == null && r.Exam.ExamDate >= DateTime.Today)
+                    .OrderBy(r => r.Exam.ExamDate)
+                    .FirstOrDefaultAsync();
+
+                if (next is not null)
+                {
+                    nextExamDate = next.Exam.ExamDate;
+                    var course = await AcademicDb.Courses.FindAsync(next.Exam.CourseId);
+                    nextExamCourseName = course?.Name ?? "";
+                }
+            }
+        }
+        else if (isProfessor)
+        {
+            myCoursesCount = await AcademicDb.Courses.CountAsync(c => c.ProfessorUserId == currentUser.Id);
+
+            var myCourseIds = await AcademicDb.Courses
+                .Where(c => c.ProfessorUserId == currentUser.Id)
+                .Select(c => c.Id)
+                .ToListAsync();
+
+            var myExamIds = await ExamsDb.Exams
+                .Where(e => myCourseIds.Contains(e.CourseId))
+                .Select(e => e.Id)
+                .ToListAsync();
+
+            ungradedCount = await ExamsDb.ExamRegistrations
+                .CountAsync(r => myExamIds.Contains(r.ExamId) && r.Grade == null);
+        }
+        else if (isAdminOrStaff)
+        {
+            studentsCount = await AcademicDb.Students.CountAsync();
+            coursesCount = await AcademicDb.Courses.CountAsync();
+
+            pendingRequestsCount = await RequestsDb.StudentRequests.CountAsync(r =>
+                r.Status == RequestStatus.Submitted || r.Status == RequestStatus.InReview);
+
+            upcomingExamsCount = await ExamsDb.Exams.CountAsync(e => e.ExamDate >= DateTime.Today);
+        }
+    }
+}

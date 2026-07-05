@@ -14,9 +14,9 @@
 @inject UserManager<Eportal.Modules.Identity.Domain.AppUser> UserManager
 @inject IJSRuntime JS
 
-<PageTitle>Prijava ispita</PageTitle>
+<PageTitle>Ispiti</PageTitle>
 
-<h3>Prijava ispita</h3>
+<h3>Ispiti</h3>
 
 @if (student is null)
 {
@@ -26,35 +26,90 @@ else if (student.Status != StudentStatus.Aktivan)
 {
     <p>Tvoj status studenta nije aktivan — prijava ispita nije moguća.</p>
 }
-else if (availableExams.Count == 0)
-{
-    <p>Nema dostupnih ispita za prijavu (ili si već prijavljen na sve zakazane ispite iz svojih predmeta).</p>
-}
 else
 {
-    <table class="table">
-        <thead>
-            <tr>
-                <th>Predmet</th>
-                <th>Rok</th>
-                <th>Datum</th>
-                <th>Akcije</th>
-            </tr>
-        </thead>
-        <tbody>
-            @foreach (var e in availableExams)
-            {
-                <tr>
-                    <td>@GetCourseName(e.CourseId)</td>
-                    <td>@GetPeriodName(e.ExamPeriodId)</td>
-                    <td>@e.ExamDate.ToString("dd.MM.yyyy")</td>
-                    <td>
-                        <button class="btn btn-sm btn-primary" @onclick="() => RegisterForExam(e)">Prijavi se</button>
-                    </td>
-                </tr>
-            }
-        </tbody>
-    </table>
+    <ul class="nav nav-tabs mb-3">
+        <li class="nav-item">
+            <button class="nav-link @(activeTab == "prijava" ? "active" : "")" @onclick='() => activeTab = "prijava"'>
+                Prijava ispita
+            </button>
+        </li>
+        <li class="nav-item">
+            <button class="nav-link @(activeTab == "prijavljeni" ? "active" : "")" @onclick='() => activeTab = "prijavljeni"'>
+                Moje prijave
+            </button>
+        </li>
+    </ul>
+
+    @if (activeTab == "prijava")
+    {
+        @if (availableExams.Count == 0)
+        {
+            <p>Nema dostupnih ispita za prijavu (ili si već prijavljen na sve zakazane ispite iz svojih predmeta).</p>
+        }
+        else
+        {
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Predmet</th>
+                        <th>Rok</th>
+                        <th>Datum</th>
+                        <th>Akcije</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var e in availableExams)
+                    {
+                        <tr>
+                            <td>@GetCourseName(e.CourseId)</td>
+                            <td>@GetPeriodName(e.ExamPeriodId)</td>
+                            <td>@e.ExamDate.ToString("dd.MM.yyyy")</td>
+                            <td>
+                                <button class="btn btn-sm btn-primary" @onclick="() => RegisterForExam(e)">Prijavi se</button>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+    }
+    else if (activeTab == "prijavljeni")
+    {
+        @if (myRegistrations.Count == 0)
+        {
+            <p>Nemaš prijavljenih ispita.</p>
+        }
+        else
+        {
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Predmet</th>
+                        <th>Datum ispita</th>
+                        <th>Ocena</th>
+                        <th>Akcije</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var r in myRegistrations)
+                    {
+                        <tr>
+                            <td>@GetCourseName(r.Exam.CourseId)</td>
+                            <td>@r.Exam.ExamDate.ToString("dd.MM.yyyy")</td>
+                            <td>@(r.Grade?.ToString() ?? "Nije ocenjeno")</td>
+                            <td>
+                                @if (r.Grade is null)
+                                {
+                                    <button class="btn btn-sm btn-outline-danger" @onclick="() => Withdraw(r)">Odjavi se</button>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+    }
 }
 
 @if (!string.IsNullOrEmpty(message))
@@ -62,44 +117,9 @@ else
     <p class="mt-2">@message</p>
 }
 
-<hr class="my-4" />
-
-<h4>Moje prijave</h4>
-@if (myRegistrations.Count == 0)
-{
-    <p>Nemaš prijavljenih ispita.</p>
-}
-else
-{
-    <table class="table">
-        <thead>
-            <tr>
-                <th>Predmet</th>
-                <th>Datum ispita</th>
-                <th>Ocena</th>
-                <th>Akcije</th>
-            </tr>
-        </thead>
-        <tbody>
-            @foreach (var r in myRegistrations)
-            {
-                <tr>
-                    <td>@GetCourseName(r.Exam.CourseId)</td>
-                    <td>@r.Exam.ExamDate.ToString("dd.MM.yyyy")</td>
-                    <td>@(r.Grade?.ToString() ?? "Nije ocenjeno")</td>
-                    <td>
-                        @if (r.Grade is null)
-                        {
-                            <button class="btn btn-sm btn-outline-danger" @onclick="() => Withdraw(r)">Odjavi se</button>
-                        }
-                    </td>
-                </tr>
-            }
-        </tbody>
-    </table>
-}
 
 @code {
+    private string activeTab = "prijava";
     private Student? student;
     private List<Course> courses = new();
     private List<ExamPeriod> periods = new();

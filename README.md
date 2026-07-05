@@ -10,6 +10,7 @@ Eportal digitalizuje ključne administrativne i akademske procese na fakultetu: 
 - **Frontend:** Blazor Server
 - **Baza podataka:** MySQL + Entity Framework Core 9 (Pomelo provajder)
 - **Autentifikacija:** ASP.NET Core Identity (cookie-based) + role-based autorizacija
+- **Generisanje PDF dokumenata:** QuestPDF
 
 ## Arhitektura
 
@@ -28,7 +29,7 @@ Eportal.sln
 │   ├── Eportal.Modules.Identity       → autentifikacija, autorizacija, korisnici i uloge
 │   ├── Eportal.Modules.Academic       → studenti, predmeti, studijski programi, upisi
 │   ├── Eportal.Modules.Exams          → ispitni rokovi, ispiti, prijave, ocene
-│   └── Eportal.Modules.Requests       → digitalna studentska služba (zahtevi, statusi)
+│   └── Eportal.Modules.Requests       → digitalna studentska služba, zahtevi, PDF potvrde
 ```
 
 Svaki modul je organizovan po slojevima: **Domain** (entiteti), **Application** (poslovna logika, po potrebi) i **Infrastructure** (baza, eksterni servisi). Kad jednom modulu treba podatak iz drugog (npr. Academic/Exams/Requests modulu ime profesora ili studenta iz Identity modula), koristi se labava veza preko `Eportal.Shared` (zajednički DTO + interfejs), a ne direktna referenca između modula — svaki modul ostaje nezavisno razvojna celina.
@@ -36,11 +37,12 @@ Svaki modul je organizovan po slojevima: **Domain** (entiteti), **Application** 
 ## Trenutni status
 
 - [x] Solution struktura i moduli povezani referencama
-- [x] **Identity modul — gotov**: registracija (zaključana za Administratora/Studentsku službu), login/logout, 4 uloge (Student, Profesor, StudentskaSluzba, Administrator), zaštita ruta po ulogama, upravljanje korisnicima (promena uloge, aktivacija/deaktivacija/brisanje naloga), lični profil sa promenom lozinke
-- [x] **Academic modul — gotov**: studijski programi (CRUD), predmeti (dodavanje/izmena/brisanje, vezani za više studijskih programa), upis studenata na predmete, lista predmeta filtrirana po ulozi
-- [x] **Exams modul — gotov**: ispitni rokovi (sesije sa periodom), zakazivanje konkretnih ispita po predmetu unutar roka, prijava/odjava ispita (student), unos ocena (profesor, ograničeno na sopstvene predmete), automatski prosek i ESPB na profilu studenta
-- [x] **Requests modul — u toku**: podnošenje zahteva (student, 5 tipova iz plana), obrada zahteva (Administrator/StudentskaSluzba, tok Submitted → InReview → Approved/Rejected sa razlogom odbijanja)
-- [ ] Generisanje PDF potvrda za odobrene zahteve (Document Service iz originalnog plana) — sledeći korak
+- [x] **Identity modul — gotov**: registracija (zaključana za Administratora/Studentsku službu), login/logout, 4 uloge (Student, Profesor, StudentskaSluzba, Administrator), zaštita ruta po ulogama, upravljanje korisnicima, lični profil sa promenom lozinke
+- [x] **Academic modul — gotov**: studijski programi, predmeti (dodavanje/izmena/brisanje, vezani za više studijskih programa), upis studenata na predmete, lista predmeta filtrirana po ulozi
+- [x] **Exams modul — gotov**: ispitni rokovi (sesije), zakazivanje konkretnih ispita po predmetu unutar roka, prijava/odjava ispita, unos ocena (profesor, ograničeno na sopstvene predmete), automatski prosek i ESPB na profilu
+- [x] **Requests modul — gotov**: podnošenje zahteva (5 tipova), obrada zahteva (tok Submitted → InReview → Approved/Rejected sa razlogom), generisanje PDF potvrde za odobrene zahteve, prilagođeno po tipu zahteva
+
+**Sva četiri modula iz plana su implementirana.**
 
 ## Pokretanje projekta lokalno
 
@@ -92,9 +94,9 @@ Pri prvom pokretanju aplikacija automatski seed-uje 4 osnovne uloge i administra
 
 ## Struktura po ulogama
 
-| Uloga              | Mogućnosti                                                                                                                     |
-| ------------------ | ------------------------------------------------------------------------------------------------------------------------------- |
-| Student            | Lični i akademski profil (prosek, ESPB, upisani/položeni predmeti), prijava/odjava ispita, podnošenje i praćenje zahteva          |
-| Profesor           | Pregled i izmena svojih predmeta, unos ocena za svoje predmete                                                                    |
-| Studentska služba  | Dodavanje naloga (Student/Profesor), predmeti, upis studenata, studijski programi, ispitni rokovi/ispiti, obrada zahteva          |
-| Administrator      | Sve navedeno + upravljanje korisnicima (uloge, aktivacija/deaktivacija/brisanje naloga)                                          |
+| Uloga             | Mogućnosti                                                                                                                              |
+| ----------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| Student           | Lični i akademski profil (prosek, ESPB, upisani/položeni predmeti), prijava/odjava ispita, podnošenje zahteva i preuzimanje PDF potvrda |
+| Profesor          | Pregled i izmena svojih predmeta, unos ocena za svoje predmete                                                                          |
+| Studentska služba | Dodavanje naloga (Student/Profesor), predmeti, upis studenata, studijski programi, ispitni rokovi/ispiti, obrada zahteva                |
+| Administrator     | Sve navedeno + upravljanje korisnicima (uloge, aktivacija/deaktivacija/brisanje naloga)                                                 |

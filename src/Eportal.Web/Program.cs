@@ -9,7 +9,9 @@ using Eportal.Shared;
 using Eportal.Web.Components;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using QuestPDF.Infrastructure;
 
+QuestPDF.Settings.License = QuestPDF.Infrastructure.LicenseType.Community;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -81,6 +83,37 @@ app.MapPost("/logout", async (SignInManager<AppUser> signInManager) =>
 {
     await signInManager.SignOutAsync();
     return Results.LocalRedirect("/");
+});
+
+app.MapGet("/requests/{id:int}/document", async (
+    int id,
+    Eportal.Modules.Requests.Infrastructure.RequestsDbContext requestsDb,
+    Eportal.Modules.Academic.Infrastructure.AcademicDbContext academicDb,
+    Eportal.Shared.IUserLookupService userLookup) =>
+{
+    var request = await requestsDb.StudentRequests.FindAsync(id);
+
+    if (request is null || request.Status != Eportal.Modules.Requests.Domain.RequestStatus.Approved)
+    {
+        return Results.NotFound();
+    }
+
+    var student = await academicDb.Students
+        .Include(s => s.StudyProgram)
+        .FirstOrDefaultAsync(s => s.Id == request.StudentId);
+
+    if (student is null)
+    {
+        return Results.NotFound();
+    }
+
+    var user = await userLookup.FindByUserIdAsync(student.UserId);
+    var fullName = user is not null ? $"{user.FirstName} {user.LastName}" : "Nepoznat student";
+
+    var pdfBytes = Eportal.Modules.Requests.Application.RequestDocumentGenerator.Generate(
+        request, fullName, student.IndexNumber, student.StudyProgram?.Name ?? "");
+
+    return Results.File(pdfBytes, "application/pdf", $"potvrda_{id}.pdf");
 });
 
 app.MapStaticAssets();

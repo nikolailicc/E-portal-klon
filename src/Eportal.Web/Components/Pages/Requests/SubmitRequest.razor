@@ -15,37 +15,90 @@
 @inject AuthenticationStateProvider AuthProvider
 @inject UserManager<AppUser> UserManager
 
-<PageTitle>Podnošenje zahteva</PageTitle>
+<PageTitle>Zahtevi</PageTitle>
 
-<h3>Podnošenje zahteva</h3>
-
+<h3>Zahtevi</h3>
 @if (student is null)
 {
     <p>Nemaš akademski profil.</p>
 }
 else
 {
-    <EditForm Model="@model" OnValidSubmit="HandleSubmit" FormName="submit-request-form">
-        <DataAnnotationsValidator />
-        <ValidationSummary />
+    <ul class="nav nav-tabs mb-3">
+        <li class="nav-item">
+            <button class="nav-link @(activeTab == "novi" ? "active" : "")" @onclick='() => activeTab = "novi"'>
+                Novi zahtev
+            </button>
+        </li>
+        <li class="nav-item">
+            <button class="nav-link @(activeTab == "istorija" ? "active" : "")" @onclick='() => activeTab = "istorija"'>
+                Istorija zahteva
+            </button>
+        </li>
+    </ul>
 
-        <div class="mb-3">
-            <label>Tip zahteva</label>
-            <InputSelect class="form-control" @bind-Value="model.Type">
-                @foreach (var type in Enum.GetValues<RequestType>())
-                {
-                    <option value="@type">@GetTypeLabel(type)</option>
-                }
-            </InputSelect>
-        </div>
+    @if (activeTab == "novi")
+    {
+        <EditForm Model="@model" OnValidSubmit="HandleSubmit" FormName="submit-request-form">
+            <DataAnnotationsValidator />
+            <ValidationSummary />
 
-        <div class="mb-3">
-            <label>Napomena (opciono)</label>
-            <InputTextArea class="form-control" @bind-Value="model.Note" rows="3" />
-        </div>
+            <div class="mb-3">
+                <label>Tip zahteva</label>
+                <InputSelect class="form-control" @bind-Value="model.Type">
+                    @foreach (var type in Enum.GetValues<RequestType>())
+                    {
+                        <option value="@type">@GetTypeLabel(type)</option>
+                    }
+                </InputSelect>
+            </div>
 
-        <button type="submit" class="btn btn-primary">Podnesi zahtev</button>
-    </EditForm>
+            <div class="mb-3">
+                <label>Napomena (opciono)</label>
+                <InputTextArea class="form-control" @bind-Value="model.Note" rows="3" />
+            </div>
+
+            <button type="submit" class="btn btn-primary">Podnesi zahtev</button>
+        </EditForm>
+    }
+    else if (activeTab == "istorija")
+    {
+        @if (myRequests.Count == 0)
+        {
+            <p>Nemaš podnetih zahteva.</p>
+        }
+        else
+        {
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Tip</th>
+                        <th>Status</th>
+                        <th>Podneto</th>
+                        <th>Napomena / Razlog</th>
+                        <th>Dokument</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var r in myRequests)
+                    {
+                        <tr>
+                            <td>@GetTypeLabel(r.Type)</td>
+                            <td>@GetStatusLabel(r.Status)</td>
+                            <td>@r.SubmittedAt.ToLocalTime().ToString("dd.MM.yyyy")</td>
+                            <td>@(r.Status == RequestStatus.Rejected ? r.RejectionReason : r.Note)</td>
+                            <td>
+                                @if (r.Status == RequestStatus.Approved)
+                                {
+                                    <a href="/requests/@r.Id/document" class="btn btn-sm btn-outline-primary" target="_blank">Preuzmi PDF</a>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+    }
 }
 
 @if (!string.IsNullOrEmpty(message))
@@ -53,39 +106,8 @@ else
     <p class="mt-2">@message</p>
 }
 
-<hr class="my-4" />
-
-<h4>Moji zahtevi</h4>
-@if (myRequests.Count == 0)
-{
-    <p>Nemaš podnetih zahteva.</p>
-}
-else
-{
-    <table class="table">
-        <thead>
-            <tr>
-                <th>Tip</th>
-                <th>Status</th>
-                <th>Podneto</th>
-                <th>Napomena / Razlog</th>
-            </tr>
-        </thead>
-        <tbody>
-            @foreach (var r in myRequests)
-            {
-                <tr>
-                    <td>@GetTypeLabel(r.Type)</td>
-                    <td>@GetStatusLabel(r.Status)</td>
-                    <td>@r.SubmittedAt.ToLocalTime().ToString("dd.MM.yyyy")</td>
-                    <td>@(r.Status == RequestStatus.Rejected ? r.RejectionReason : r.Note)</td>
-                </tr>
-            }
-        </tbody>
-    </table>
-}
-
 @code {
+    private string activeTab = "novi";
     private Student? student;
     private RequestModel model = new();
     private List<StudentRequest> myRequests = new();
@@ -133,6 +155,7 @@ else
 
         message = "Zahtev uspešno podnet.";
         model = new();
+        activeTab = "istorija";
         LoadRequests();
     }
 
