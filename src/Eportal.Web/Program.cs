@@ -4,12 +4,13 @@ using Eportal.Modules.Exams.Infrastructure;
 using Eportal.Modules.Identity.Application;
 using Eportal.Modules.Identity.Domain;
 using Eportal.Modules.Identity.Infrastructure;
+using Eportal.Modules.Requests.Application;
 using Eportal.Modules.Requests.Infrastructure;
 using Eportal.Shared;
 using Eportal.Web.Components;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
-using QuestPDF.Infrastructure;
+
 
 QuestPDF.Settings.License = QuestPDF.Infrastructure.LicenseType.Community;
 
@@ -89,6 +90,7 @@ app.MapGet("/requests/{id:int}/document", async (
     int id,
     Eportal.Modules.Requests.Infrastructure.RequestsDbContext requestsDb,
     Eportal.Modules.Academic.Infrastructure.AcademicDbContext academicDb,
+    Eportal.Modules.Exams.Infrastructure.ExamsDbContext examsDb,
     Eportal.Shared.IUserLookupService userLookup) =>
 {
     var request = await requestsDb.StudentRequests.FindAsync(id);
@@ -109,9 +111,38 @@ app.MapGet("/requests/{id:int}/document", async (
 
     var user = await userLookup.FindByUserIdAsync(student.UserId);
     var fullName = user is not null ? $"{user.FirstName} {user.LastName}" : "Nepoznat student";
+    var logoPath = Path.Combine(app.Environment.WebRootPath, "images", "logo.png");
 
-    var pdfBytes = Eportal.Modules.Requests.Application.RequestDocumentGenerator.Generate(
-        request, fullName, student.IndexNumber, student.StudyProgram?.Name ?? "");
+    var courses = academicDb.Courses.ToList();
+
+    var passedExams = examsDb.ExamRegistrations
+        .Include(r => r.Exam)
+        .Where(r => r.StudentId == student.Id && r.Grade != null && r.Grade >= 6) // prilagodi prag prolaznosti ako je drugačiji
+        .OrderBy(r => r.Exam!.ExamDate)
+        .ToList();
+
+    var examResults = passedExams
+        .Where(r => r.Exam is not null)
+        .Select(r =>
+        {
+            var course = courses.FirstOrDefault(c => c.Id == r.Exam!.CourseId);
+            return new ExamResult(
+                SubjectName: course?.Name ?? "Nepoznat predmet",
+                Espb: course?.Espb ?? 0,
+                Grade: r.Grade!.Value,
+                PassedAt: r.Exam!.ExamDate
+            );
+        })
+        .ToList();
+
+    var pdfBytes = RequestDocumentGenerator.Generate(
+        request: request,
+        studentFullName: fullName,
+        indexNumber: student.IndexNumber,
+        studyProgram: student.StudyProgram?.Name ?? "",
+        logoPath: logoPath,
+        examResults: examResults
+    );
 
     return Results.File(pdfBytes, "application/pdf", $"potvrda_{id}.pdf");
 });

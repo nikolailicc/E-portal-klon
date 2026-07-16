@@ -22,7 +22,8 @@ public enum RequestType
     PotvrdaZaStipendiju = 1,
     PromenaLicnihPodataka = 2,
     Molba = 3,
-    Uverenje = 4
+    Uverenje = 4,
+    PotvrdaPolozenihIspita = 5
 }
 
 public enum RequestStatus
