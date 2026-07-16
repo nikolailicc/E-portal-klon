@@ -27,22 +27,31 @@ public static class RequestDocumentGenerator
             {
                 page.Size(PageSizes.A4);
                 page.Margin(50);
-                page.DefaultTextStyle(x => x.FontSize(12).LineHeight(1.3f));
+                page.DefaultTextStyle(x => x.FontSize(11).LineHeight(1.3f));
 
-                page.Header().Row(row =>
+                page.Header().Column(col =>
                 {
-                    row.ConstantItem(70).Height(70).Image(logoPath).FitArea();
-                    row.RelativeItem().AlignMiddle().Text("Prirodno-matematički fakultet")
-                        .FontSize(18).Bold().AlignCenter();
-                    row.ConstantItem(70); 
+                    col.Item().Row(row =>
+                    {
+                        row.RelativeItem().Column(info =>
+                        {
+                            info.Item().Text("UNIVERZITET U NOVOM SADU").FontSize(9).Bold().FontColor(Colors.Grey.Darken2);
+                            info.Item().Text("PRIRODNO-MATEMATIČKI FAKULTET").FontSize(13).Bold().FontColor(Colors.Blue.Darken3);
+                            info.Item().Text("Trg Dositeja Obradovića 3, 21000 Novi Sad").FontSize(8).FontColor(Colors.Grey.Darken1);
+                            info.Item().Text("E-mail: studentska@pmf.uns.ac.rs").FontSize(8).FontColor(Colors.Grey.Darken1);
+                        });
+                        row.ConstantItem(55).Height(55).Image(logoPath).FitArea();
+                    });
+                    
+                    col.Item().PaddingTop(8).Height(1).Background(Colors.Grey.Lighten1);
                 });
 
                 page.Content()
                     .PaddingVertical(30)
                     .Column(col =>
                     {
-                        col.Item().Text(title).FontSize(16).Bold().AlignCenter();
-                        col.Item().PaddingTop(30);
+                        col.Item().Text(title).FontSize(15).Bold().AlignCenter();
+                        col.Item().PaddingTop(25);
 
                         switch (request.Type)
                         {
@@ -80,8 +89,23 @@ public static class RequestDocumentGenerator
                     });
 
                 page.Footer()
-                    .AlignRight()
-                    .Text("Eportal — automatski generisan dokument");
+                    .Column(col =>
+                    {
+                        col.Item().Height(1).Background(Colors.Grey.Lighten1);
+                        col.Item().PaddingTop(5).Row(row =>
+                        {
+                            row.RelativeItem().Text("Eportal — " + DateTime.Now.Year)
+                                .FontSize(8).FontColor(Colors.Grey.Darken1);
+                            
+                            row.ConstantItem(100).AlignRight().Text(text =>
+                            {
+                                text.Span("Strana ").FontSize(8).FontColor(Colors.Grey.Darken1);
+                                text.CurrentPageNumber().FontSize(8).FontColor(Colors.Grey.Darken1);
+                                text.Span(" od ").FontSize(8).FontColor(Colors.Grey.Darken1);
+                                text.TotalPages().FontSize(8).FontColor(Colors.Grey.Darken1);
+                            });
+                        });
+                    });
             });
         });
 
@@ -113,11 +137,14 @@ public static class RequestDocumentGenerator
             for (int i = 0; i < exams.Count; i++)
             {
                 var exam = exams[i];
-                table.Cell().Element(BodyCell).AlignCenter().Text((i + 1).ToString());
-                table.Cell().Element(BodyCell).Text(exam.SubjectName);
-                table.Cell().Element(BodyCell).AlignCenter().Text(exam.Espb.ToString());
-                table.Cell().Element(BodyCell).AlignCenter().Text(exam.Grade.ToString());
-                table.Cell().Element(BodyCell).AlignCenter().Text(exam.PassedAt.ToString("dd.MM.yyyy."));
+                var isEven = i % 2 == 0;
+                var cellStyle = isEven ? (Func<IContainer, IContainer>)BodyCell : AlternatingBodyCell;
+
+                table.Cell().Element(cellStyle).AlignCenter().Text((i + 1).ToString());
+                table.Cell().Element(cellStyle).Text(exam.SubjectName);
+                table.Cell().Element(cellStyle).AlignCenter().Text(exam.Espb.ToString());
+                table.Cell().Element(cellStyle).AlignCenter().Text(exam.Grade.ToString());
+                table.Cell().Element(cellStyle).AlignCenter().Text(exam.PassedAt.ToString("dd.MM.yyyy."));
             }
 
             var totalEspb = exams.Sum(e => e.Espb);
@@ -134,19 +161,25 @@ public static class RequestDocumentGenerator
     }
 
     private static IContainer HeaderCell(IContainer container) =>
-        container.Background(Colors.Grey.Lighten2)
-                  .Border(1).BorderColor(Colors.Grey.Medium)
+        container.Background("#1A5276") // Tamno plava
+                  .Border(1).BorderColor("#154260")
                   .Padding(5)
-                  .DefaultTextStyle(x => x.FontSize(10).Bold());
+                  .DefaultTextStyle(x => x.FontSize(10).Bold().FontColor(Colors.White));
 
     private static IContainer BodyCell(IContainer container) =>
-        container.Border(1).BorderColor(Colors.Grey.Lighten1)
+        container.Border(1).BorderColor("#D6E4F0") // Svetloplave ivice
+                  .Padding(5)
+                  .DefaultTextStyle(x => x.FontSize(10));
+
+    private static IContainer AlternatingBodyCell(IContainer container) =>
+        container.Background("#F2F6FA") // Blaga plava za zebra-redove
+                  .Border(1).BorderColor("#D6E4F0")
                   .Padding(5)
                   .DefaultTextStyle(x => x.FontSize(10));
 
     private static IContainer FooterCell(IContainer container) =>
-        container.Background(Colors.Grey.Lighten3)
-                  .Border(1).BorderColor(Colors.Grey.Medium)
+        container.Background("#E1EBF5") // Plavičasto zaglavlje za footer
+                  .Border(1).BorderColor("#B9D1E6")
                   .Padding(5)
                   .DefaultTextStyle(x => x.FontSize(10));
 
